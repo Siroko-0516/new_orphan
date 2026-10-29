@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>길잡이 — 시선을 넘어, 안전으로</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<header><a class="brand" href="/">◎ <span>길잡이</span></a><span class="tag">AI VISION ASSISTANT</span><span class="private">● 영상은 저장하지 않습니다</span></header>
+<main>
+<section class="intro"><div class="eyebrow">A LITTLE MORE AWARE. A LITTLE MORE SAFE.</div><h1>당신의 시선에,<br><em>안전을 더하다.</em></h1><p>주변을 살피는 AI, 필요한 순간에 들려주는 안내.<br>카메라를 켜고 길잡이와 함께 시작하세요.</p></section>
+<div class="workspace">
+<section class="camera-panel"><div class="panel-top"><span><i class="dot"></i> 라이브 카메라</span><span id="camera-state">대기 중</span></div>
+<div class="viewport"><video id="video" autoplay playsinline muted></video><canvas id="overlay"></canvas><div id="placeholder"><div class="camera-icon">⌖</div><h2>주변을 함께 살펴볼까요?</h2><p>카메라를 켜면 물체 감지가 시작됩니다.</p><span>YOLO 감지 · AI 위험 판단 · 음성 안내</span></div><span class="view-badge">YOLO 11 · OBJECT DETECTION</span></div>
+<div class="camera-controls"><button id="start" class="primary">◉ 카메라 시작</button><button id="stop" disabled>■ 중지</button><label class="voice-toggle"><input id="voice" type="checkbox" checked> 음성 안내</label><button id="test-speech" title="음성 출력 확인">♫ 음성 테스트</button></div>
+<p class="consent">시작하면 영상 프레임이 이 서버로 전송됩니다. AI 연결 시 일부 프레임은 선택한 AI 제공자에게 전송됩니다.</p></section>
+<aside><section class="card status-card"><div class="card-title"><h2>주변 상황</h2><span id="provider">연결 확인 중</span></div><div id="risk" class="risk unknown"><span id="risk-icon">◌</span><strong id="risk-title">안내 대기 중</strong></div><p id="guidance" aria-live="polite">카메라를 켜면 주변 상황을 분석합니다.</p><div class="updated" id="updated">아직 분석하지 않았습니다</div></section>
+<section class="card"><div class="card-title"><h2>감지된 물체</h2><span id="count">0개</span></div><div id="objects" class="objects"><p class="empty">감지 결과가 여기에 표시됩니다.</p></div></section>
+<section class="card pipeline"><h2>함께 작동하는 세 가지 기술</h2><div><b>01</b><span><strong>YOLO</strong><small>화면 속 물체를 빠르게 감지</small></span><i id="yolo-led">대기</i></div><div><b>02</b><span><strong>Gemini / GPT</strong><small>장면을 이해하고 위험을 판단</small></span><i id="ai-led">대기</i></div><div><b>03</b><span><strong>음성 안내</strong><small id="tts-mode">ElevenLabs → 기본 TTS</small></span><i id="tts-led">대기</i></div></section></aside>
+</div>
+<div id="notice" role="status" hidden></div><footer><span>↗ 더 나은 인지를 위한 작은 동행</span><p>길잡이는 보조 도구입니다. 감지 누락이나 판단 지연이 발생할 수 있으며, 주변 안전을 보장하지 않습니다.</p></footer>
+</main><script src="/static/app.js" defer></script></body></html>
