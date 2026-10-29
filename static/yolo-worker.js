@@ -1,7 +1,8 @@
-import * as ort from 'onnxruntime-web/webgpu';
+import * as ort from 'onnxruntime-web/wasm';
 import { SIZE, decode } from './yolo-core.js';
 
-let session, backend;
+let session;
+const backend = 'WASM';
 ort.env.wasm.wasmPaths = new URL('/ort/', self.location.origin).href;
 ort.env.wasm.numThreads = 1;
 const canvas = new OffscreenCanvas(SIZE, SIZE);
@@ -12,16 +13,9 @@ self.onmessage = async ({ data: { id, type, bitmap } }) => {
   try {
     if(type==='init') {
       if(!session) {
-        if(self.navigator.gpu) {
-          try {
-            session=await ort.InferenceSession.create('/yolo11n.onnx',{executionProviders:['webgpu']});
-            backend='WebGPU';
-          } catch { /* Unsupported device or graph: use local WASM instead. */ }
-        }
-        if(!session) {
-          session=await ort.InferenceSession.create('/yolo11n.onnx',{executionProviders:['wasm']});
-          backend='WASM';
-        }
+        // Some mobile WebGPU drivers produce invalid but non-throwing results.
+        // Use the CPU/WASM path until GPU inference has parity validation.
+        session=await ort.InferenceSession.create('/yolo11n.onnx',{executionProviders:['wasm']});
       }
       self.postMessage({id,result:{backend}});
       return;
