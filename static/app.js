@@ -2,7 +2,7 @@ import { BrowserYOLO } from './browser-yolo.js';
 const $ = id => document.getElementById(id);
 const detector = new BrowserYOLO();
 let stream, running = false, generation = 0, timer, lastAnalysis = 0, lastSpoken = '', lastSpeechAt = 0;
-let speechController, audio, audioUrl;
+let speechController, audio, audioUrl, activeUtterance, speechEpoch=0, lastLocalSpeechAt=0;
 let elevenlabsConfigured=false, lastScene='', lastSceneAt=0;
 const capture = document.createElement('canvas');
 const ctx = $('overlay').getContext('2d');
@@ -40,18 +40,29 @@ function draw(detections) {
   for (const d of detections) {const row=document.createElement('div'); row.className='object'; const label=document.createElement('span'),score=document.createElement('span');label.textContent=names[d.label]||d.label;score.textContent=`${Math.round(d.confidence*100)}%`;row.append(label,score);$('objects').append(row);}
 }
 function cancelSpeech() {
+  speechEpoch++;
   speechController?.abort();
+  speechController=null;
   if (audio) { audio.pause(); audio = null; }
   if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; }
   window.speechSynthesis?.cancel();
+  activeUtterance=null;
 }
-function nativeSpeak(text) {
+function nativeSpeak(text, reason='') {
   if (!('speechSynthesis' in window)) { $('tts-led').textContent='미지원';notice('이 브라우저는 기본 음성을 지원하지 않습니다. 화면의 안내를 확인하세요.');return; }
   const utterance=new SpeechSynthesisUtterance(text);utterance.lang='ko-KR';utterance.rate=1;
+  activeUtterance=utterance;
+  const epoch=speechEpoch;
   const voices=speechSynthesis.getVoices(); utterance.voice=voices.find(v=>v.lang.startsWith('ko'))||null;
-  $('tts-led').textContent='안내 중';$('tts-mode').textContent='브라우저 기본 TTS';
-  utterance.onend=()=>{$('tts-led').textContent='대기';};
-  utterance.onerror=()=>{$('tts-led').textContent='실패';notice('음성을 재생하지 못했습니다. 기기의 음성 설정을 확인하세요.');};
+  $('tts-led').textContent='안내 중';$('tts-mode').textContent=reason?'기본 TTS · ElevenLabs 실패':'브라우저 기본 TTS';
+  $('tts-feedback').textContent=reason||'기기의 한국어 음성으로 재생합니다.';
+  utterance.onend=()=>{if(epoch!==speechEpoch)return;activeUtterance=null;$('tts-led').textContent='대기';};
+  utterance.onerror=event=>{
+    if(epoch!==speechEpoch)return;activeUtterance=null;
+    if(['canceled','interrupted'].includes(event.error))return;
+    $('tts-led').textContent='실패';
+    $('tts-feedback').textContent=event.error==='not-allowed'?'브라우저가 자동 음성을 차단했습니다. 기본 음성 테스트 버튼을 직접 눌러주세요.':'기본 음성을 재생하지 못했습니다. 기기 음량과 한국어 음성 설치를 확인하세요.';
+  };
   speechSynthesis.speak(utterance);
 }
 async function speak(text) {
@@ -59,26 +70,45 @@ async function speak(text) {
   cancelSpeech();
   if(!elevenlabsConfigured){nativeSpeak(text);return;}
   const controller = new AbortController();speechController=controller;
-  const timeout=setTimeout(()=>controller.abort('timeout'),9000);
+  const epoch=speechEpoch;
+  $('tts-led').textContent='음성 생성 중';$('tts-feedback').textContent='ElevenLabs 음성을 요청하고 있습니다.';
+  const timeout=setTimeout(()=>controller.abort('timeout'),12000);
+  let fellBack=false;
   try {
     const response=await api('/api/speech',{text},controller.signal);
     const blob=await response.blob();
     if(controller.signal.aborted) return;
     audioUrl=URL.createObjectURL(blob);audio=new Audio(audioUrl);
-    $('tts-mode').textContent='ElevenLabs';$('tts-led').textContent='안내 중';
-    audio.onended=()=>{$('tts-led').textContent='대기';if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;};
+    $('tts-mode').textContent='ElevenLabs';$('tts-led').textContent='안내 중';$('tts-feedback').textContent='ElevenLabs 음성을 재생합니다.';
+    const fallback=message=>{
+      if(epoch!==speechEpoch||controller.signal.aborted||fellBack)return;
+      fellBack=true;
+      audio?.pause();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;audio=null;
+      nativeSpeak(text,message);
+    };
+    audio.onerror=()=>fallback('받은 음성을 재생하지 못해 기본 TTS로 전환했습니다.');
+    audio.onended=()=>{if(epoch!==speechEpoch)return;$('tts-led').textContent='대기';if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;};
     await audio.play();
   } catch (error) {
+    if(fellBack)return;
     if(controller.signal.aborted && controller.signal.reason !== 'timeout') return;
-    nativeSpeak(text);
-  } finally {clearTimeout(timeout);}
+    if(epoch!==speechEpoch)return;
+    audio?.pause();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;audio=null;
+    nativeSpeak(text,controller.signal.reason==='timeout'?'ElevenLabs 응답이 늦어 기본 TTS로 전환했습니다.':`${error.name==='NotAllowedError'?'브라우저가 오디오 자동 재생을 차단했습니다.':error.message} 기본 TTS로 전환합니다.`);
+  } finally {clearTimeout(timeout);if(speechController===controller)speechController=null;}
 }
 let aiConfigured=false, assessmentBusy=false;
 function alertUser(text, immediate=false) {
+  if(!$('voice').checked)return;
   const now=Date.now();
+  if(immediate){
+    if(activeUtterance||speechController||audio&&!audio.paused)return;
+    if(now-lastLocalSpeechAt<12000||(text===lastSpoken&&now-lastLocalSpeechAt<30000))return;
+    lastLocalSpeechAt=now;lastSpoken=text;cancelSpeech();nativeSpeak(text);return;
+  }
   if(now-lastSpeechAt<12000 || (text===lastSpoken && now-lastSpeechAt<30000))return;
   lastSpoken=text;lastSpeechAt=now;
-  if(immediate){cancelSpeech();if($('voice').checked)nativeSpeak(text);}else void speak(text);
+  void speak(text);
 }
 function localAlert(detections) {
   const important=new Set(['person','bicycle','car','motorcycle','bus','truck','dog','chair','bench']);
@@ -95,13 +125,13 @@ async function assessScene(image, detections, token) {
   try {
       lastAnalysis=Date.now();$('ai-led').textContent='분석 중';
       try {
-        const verdict=await (await api('/api/assess',{image,detections},AbortSignal.timeout(22000))).json();
+        const verdict=await (await api('/api/assess',{image,detections},AbortSignal.timeout(35000))).json();
         if (!running || token!==generation || !$('ai-optin').checked) return;
         $('risk').className=`risk ${verdict.level}`;
         $('risk-title').textContent=({low:'특이 위험 미감지',medium:'주변을 살펴주세요',high:'주의가 필요합니다',unknown:'판단이 어렵습니다'})[verdict.level];
         $('risk-icon').textContent=verdict.level==='high'?'⚠':'◉';$('guidance').textContent=verdict.message;
         $('updated').textContent=`${new Date().toLocaleTimeString('ko-KR')} 분석 · 단일 장면 기준`;$('ai-led').textContent='연결됨';
-        if(['medium','high'].includes(verdict.level))alertUser(verdict.message);
+        alertUser(verdict.message);
       } catch(error) {
         if (!running || token!==generation || !$('ai-optin').checked) return;
         $('ai-led').textContent='연결 실패';$('risk').className='risk unknown';$('risk-title').textContent='현재 판단 불가';$('guidance').textContent=error.message;
@@ -150,12 +180,17 @@ $('start').onclick=async()=>{
     const video=$('video');video.srcObject=stream;await video.play();
     if(!running||token!==generation)return;
     video.classList.add('active');$('placeholder').hidden=true;$('stop').disabled=false;$('camera-state').textContent='실시간 감지 중';
-    lastAnalysis=0;lastSceneAt=0;lastSpoken='';lastSpeechAt=0;void loop(token);
+    lastAnalysis=0;lastSceneAt=0;lastSpoken='';lastSpeechAt=0;lastLocalSpeechAt=0;void loop(token);
     notice(!aiConfigured?'기기 내 YOLO 감지와 빠른 물체 알림을 사용합니다. AI 장면 판단은 서버 키 설정 후 켤 수 있습니다.':'');
   }catch(error){if(token===generation){stop();notice(error.name==='NotAllowedError'?'카메라 권한이 필요합니다. 브라우저 설정에서 허용한 후 다시 시작하세요.':error.message);}}
 };
 $('stop').onclick=stop;$('voice').onchange=()=>{if(!$('voice').checked)cancelSpeech();};
 $('test-speech').onclick=()=>{void speak('길잡이 음성 안내입니다. 주변을 살피며 이동하세요.');};
+$('test-native').onclick=()=>{
+  if(!$('voice').checked){$('tts-feedback').textContent='먼저 음성 안내를 켜주세요.';return;}
+  cancelSpeech();nativeSpeak('기본 음성 테스트입니다. 소리가 들리면 정상입니다.');
+};
+window.speechSynthesis?.getVoices();
 $('ai-optin').onchange=()=>{
   lastAnalysis=0;lastSceneAt=0;
   if(!$('ai-optin').checked){$('ai-led').textContent='꺼짐';$('risk').className='risk unknown';$('risk-title').textContent='AI 설명 꺼짐';$('guidance').textContent='물체 감지와 빠른 물체 알림은 기기에서 계속됩니다.';cancelSpeech();}

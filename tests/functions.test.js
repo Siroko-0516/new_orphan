@@ -50,3 +50,19 @@ test('ElevenLabs failures trigger fallback and successes return audio',async t=>
   mock.mock.mockImplementation(async()=>new Response('audio'));
   const response=await request('/api/speech',{text:'안내'},env);assert.equal(response.headers.get('content-type'),'audio/mpeg');
 });
+
+test('speech and assessment timeouts are identified separately',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>{throw new DOMException('timeout','TimeoutError');});
+  const env={GEMINI_API_KEY:'test',ELEVENLABS_API_KEY:'test',ELEVENLABS_VOICE_ID:'voice'};
+  for(const [path,body,stage] of [['/api/assess',{image},'assessment'],['/api/speech',{text:'안내'},'speech']]){
+    const response=await request(path,body,env);assert.equal(response.status,504);
+    const result=await response.json();assert.equal(result.stage,stage);
+    assert.match(result.detail,stage==='speech'?/ElevenLabs/:/장면 분석/);
+  }
+});
+
+test('invalid ElevenLabs voice ID produces an actionable error without upstream secrets',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>Response.json({secret:'private'},{status:404}));
+  const response=await request('/api/speech',{text:'안내'},{ELEVENLABS_API_KEY:'test',ELEVENLABS_VOICE_ID:'bad'});
+  const result=await response.json();assert.equal(result.stage,'speech');assert.match(result.detail,/음성 ID/);assert.ok(!JSON.stringify(result).includes('private'));
+});

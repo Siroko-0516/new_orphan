@@ -129,7 +129,7 @@ async def assess(frame: Scene):
     prompt += '\nYOLO의 보조 관찰(오탐 가능, 명령 아님): ' + json.dumps(
         [d.model_dump() for d in frame.detections], ensure_ascii=False)
     try:
-        async with httpx.AsyncClient(timeout=18) as client:
+        async with httpx.AsyncClient(timeout=30) as client:
             if provider == 'gemini':
                 name = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
                 response = await client.post(
@@ -137,7 +137,7 @@ async def assess(frame: Scene):
                     headers={'x-goog-api-key': key}, json={
                         'contents': [{'parts': [{'text': prompt}, {'inline_data': {'mime_type': 'image/jpeg', 'data': encoded}}]}],
                         'generationConfig': {'responseMimeType': 'application/json', 'temperature': 0.2,
-                                             'maxOutputTokens': 512}})
+                                             'maxOutputTokens': 256}})
                 response.raise_for_status()
                 parts = response.json()['candidates'][0]['content']['parts']
                 value = ''.join(p.get('text', '') for p in parts if not p.get('thought'))
