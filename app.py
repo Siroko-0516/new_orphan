@@ -20,6 +20,8 @@ os.environ.setdefault('YOLO_CONFIG_DIR', str(ROOT / 'models' / 'config'))
 Path(os.environ['YOLO_CONFIG_DIR']).mkdir(parents=True, exist_ok=True)
 app = FastAPI(title='길잡이 · Camera Safety Assistant')
 app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')
+app.mount('/assets', StaticFiles(directory=ROOT / 'dist/assets', check_dir=False), name='assets')
+app.mount('/ort', StaticFiles(directory=ROOT / 'public/ort', check_dir=False), name='ort')
 model = None
 inference_lock = asyncio.Lock()
 
@@ -81,7 +83,14 @@ def detect(image):
 
 @app.get('/')
 async def index():
-    return FileResponse(ROOT / 'static/index.html')
+    if not (ROOT / 'dist/index.html').is_file():
+        raise HTTPException(503, '먼저 npm ci && npm run build를 실행하세요.')
+    return FileResponse(ROOT / 'dist/index.html')
+
+
+@app.get('/yolo11n.onnx')
+async def browser_model():
+    return FileResponse(ROOT / 'public/yolo11n.onnx', media_type='application/octet-stream')
 
 
 @app.get('/api/status')
