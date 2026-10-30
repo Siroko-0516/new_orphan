@@ -6,6 +6,7 @@ import android.os.SystemClock;
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Collections;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.Consumer;
@@ -25,17 +26,21 @@ final class LiveCamera implements AutoCloseable {
     private final AtomicLong received=new AtomicLong();
     private final Context context;private final Decoder decode;private final Consumer<Frame> frame;private final Consumer<String> error;
     private final long started=SystemClock.elapsedRealtime();
-    private volatile LocalCamera.Session session;private YoloDetector yolo;
-    LiveCamera(Context context,String address,LocalCamera.Connector connector,Decoder decode,Consumer<Frame> frame,Consumer<String> error){
+    private volatile LocalCamera.Request request;private YoloDetector yolo;
+    private boolean firstPreview;
+    LiveCamera(Context context,String address,LocalCamera.Connector connector,Decoder decode,Consumer<Frame> frame,Consumer<String> progress,Consumer<String> error){
         this.context=context.getApplicationContext();this.decode=decode;this.frame=frame;this.error=error;
         reader.execute(()->{
-            try(LocalCamera.Session opened=LocalCamera.open(address,connector)){
-                session=opened;if(!opened.multipart)throw new IOException("실시간 감지는 /capture가 아닌 :81/stream 주소를 사용하세요.");
+            try(LocalCamera.Request pending=LocalCamera.request(address,connector,progress)){
+                request=pending;if(!running.get())return;
+                try(LocalCamera.Session opened=pending.open()){
+                if(!opened.multipart)throw new IOException("실시간 감지는 /capture가 아닌 :81/stream 주소를 사용하세요.");
                 while(running.get()){
-                    byte[] jpeg=opened.reader.next();if(!running.get())break;
+                    byte[] jpeg=opened.next();if(!running.get())break;
                     newest.set(jpeg);received.incrementAndGet();schedule(0);
                 }
-            }catch(Exception e){fail(e);}finally{session=null;}
+                }
+            }catch(Exception e){fail(e);}finally{request=null;}
         });
     }
     private void schedule(long delay){
@@ -46,8 +51,14 @@ final class LiveCamera implements AutoCloseable {
         Bitmap image=null;
         try{
             if(!running.get())return;byte[] jpeg=newest.getAndSet(null);if(jpeg==null)return;
+            image=decode.decode(jpeg);
+            if(!firstPreview&&running.get()){
+                firstPreview=true;
+                Bitmap preview=image.copy(Bitmap.Config.ARGB_8888,false);
+                if(preview!=null)frame.accept(new Frame(jpeg,preview,Collections.emptyList(),received.get()*1000.0/Math.max(1,SystemClock.elapsedRealtime()-started),-1));
+            }
             if(yolo==null)yolo=new YoloDetector(context);
-            if(!running.get())return;image=decode.decode(jpeg);
+            if(!running.get())return;
             long start=SystemClock.elapsedRealtime();List<YoloDetector.Box> boxes=yolo.detect(image);
             long now=SystemClock.elapsedRealtime();
             if(running.get()){
@@ -63,7 +74,7 @@ final class LiveCamera implements AutoCloseable {
     private void fail(Exception e){if(running.get())error.accept(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());close();}
     @Override public void close(){
         if(!running.getAndSet(false))return;newest.set(null);
-        LocalCamera.Session active=session;if(active!=null)new Thread(active::close,"camera-close").start();
+        LocalCamera.Request active=request;if(active!=null)new Thread(active::close,"camera-close").start();
         reader.shutdownNow();
         try{detector.execute(()->{if(yolo!=null){try{yolo.close();}catch(Exception ignored){}yolo=null;}});}catch(RejectedExecutionException ignored){}
         detector.shutdown();

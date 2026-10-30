@@ -3,6 +3,7 @@
 __pycache__/
 .pytest_cache/
 models/
+android/model-packs/
 *.log
 android/.gradle/
 android/**/build/
