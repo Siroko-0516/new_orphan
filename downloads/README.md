@@ -1,5 +1,13 @@
 # 길잡이 테스트 APK
 
+## ESP 원본 영상 속도 확인용 펌웨어
+
+크롬에서 ESP 영상 자체가 끊기는 경우에는 [CameraWebServerFast-v1.zip](CameraWebServerFast-v1.zip)을 전부 압축 해제하고 내부 `CameraWebServerFast/CameraWebServerFast.ino`를 Arduino IDE로 엽니다. 이는 **ESP32-CAM에 업로드하는 카메라 코드**이며 Android APK나 별도 아두이노 HM-10 수신 코드가 아닙니다.
+
+구형 AI Thinker ESP32-CAM용으로 매 부팅 QVGA 320×240 / JPEG quality 20, PSRAM이 있으면 버퍼 2개와 최신 프레임 획득, 자체 AP 모드를 사용합니다. 스트리밍 중 3초마다 시리얼 모니터에 `STREAM` FPS·프레임 크기·프레임 대기·처리/HTTP 쓰기 시간을 출력합니다. 실제 FPS 향상을 보장하지 않습니다. [설치·측정·출처와 검증 범위](../arduino/CameraWebServerFast/README.md)를 확인하세요. 이 환경에서 ESP32 보드 컴파일과 실물 성능 측정은 실행하지 않았고, ZIP 구성·무결성·동봉한 공식 파일의 SHA-256 일치를 확인했습니다.
+
+## Android 앱
+
 최신 파일은 **[giljabi-0.2.0-debug.apk](giljabi-0.2.0-debug.apk)**이며 Android 8 이상 ARM64 기기용 디버그 빌드입니다. YOLO 가중치는 포함되지만 MiniCPM 언어 GGUF·비전 mmproj 파일은 포함되지 않습니다.
 
 휴대폰에서 APK를 내려받고 **내 파일 → 다운로드 → APK**로 설치하세요. PC의 VS Code에서 여는 파일이 아닙니다. 학교 관리 기기는 담당자에게 설치 허용을 받아야 합니다.
