@@ -4,6 +4,7 @@ const detector = new BrowserYOLO();
 let stream, running = false, generation = 0, timer, lastAnalysis = 0, lastSpoken = '', lastSpeechAt = 0;
 let speechController, audio, audioUrl, activeUtterance, speechEpoch=0, lastLocalSpeechAt=0;
 let elevenlabsConfigured=false, lastScene='', lastSceneAt=0;
+let selectedProvider='none', selectionEpoch=0, currentAssessment;
 const capture = document.createElement('canvas');
 const ctx = $('overlay').getContext('2d');
 const names = {person:'사람', bicycle:'자전거', car:'자동차', motorcycle:'오토바이', bus:'버스', truck:'트럭', dog:'개', cat:'고양이', chair:'의자', bench:'벤치', 'traffic light':'신호등', 'stop sign':'정지 표지판', backpack:'가방', umbrella:'우산'};
@@ -121,22 +122,24 @@ function localAlert(detections) {
   }
 }
 async function assessScene(image, detections, token) {
+  const selection=selectionEpoch, provider=selectedProvider;
+  const controller=new AbortController();currentAssessment=controller;
   assessmentBusy=true;
   try {
       lastAnalysis=Date.now();$('ai-led').textContent='분석 중';
       try {
-        const verdict=await (await api('/api/assess',{image,detections},AbortSignal.timeout(35000))).json();
-        if (!running || token!==generation || !$('ai-optin').checked) return;
+        const verdict=await (await api('/api/assess',{image,detections,provider},AbortSignal.any([controller.signal,AbortSignal.timeout(35000)]))).json();
+        if (!running || token!==generation || selection!==selectionEpoch || !$('ai-optin').checked) return;
         $('risk').className=`risk ${verdict.level}`;
         $('risk-title').textContent=({low:'특이 위험 미감지',medium:'주변을 살펴주세요',high:'주의가 필요합니다',unknown:'판단이 어렵습니다'})[verdict.level];
         $('risk-icon').textContent=verdict.level==='high'?'⚠':'◉';$('guidance').textContent=verdict.message;
         $('updated').textContent=`${new Date().toLocaleTimeString('ko-KR')} 분석 · 단일 장면 기준`;$('ai-led').textContent='연결됨';
         alertUser(verdict.message);
       } catch(error) {
-        if (!running || token!==generation || !$('ai-optin').checked) return;
+        if (!running || token!==generation || selection!==selectionEpoch || !$('ai-optin').checked) return;
         $('ai-led').textContent='연결 실패';$('risk').className='risk unknown';$('risk-title').textContent='현재 판단 불가';$('guidance').textContent=error.message;
       }
-  } finally { assessmentBusy=false; }
+  } finally { if(currentAssessment===controller){currentAssessment=null;assessmentBusy=false;} }
 }
 async function loop(token) {
   if (!running || token!==generation) return;
@@ -157,11 +160,13 @@ async function loop(token) {
   if(running && token===generation)timer=setTimeout(()=>loop(token),Math.max(0,200-(performance.now()-loopStart)));
 }
 function stop() {
+  currentAssessment?.abort();currentAssessment=null;assessmentBusy=false;
   running=false;generation++;clearTimeout(timer);stream?.getTracks().forEach(t=>t.stop());stream=null;
   $('video').srcObject=null;$('video').classList.remove('active');$('placeholder').hidden=false;
   ctx.clearRect(0,0,$('overlay').width,$('overlay').height);$('start').disabled=false;$('stop').disabled=true;
   $('camera-state').textContent='중지됨';$('yolo-led').textContent='대기';$('ai-led').textContent='대기';
   $('risk').className='risk unknown';$('risk-title').textContent='안내 중지됨';$('guidance').textContent='다시 시작하면 주변 상황을 분석합니다.';
+  $('updated').textContent='';
   $('local-alert').hidden=true;$('objects').replaceChildren();$('count').textContent='0개';
   cancelSpeech();$('tts-led').textContent='대기';
 }
@@ -197,4 +202,32 @@ $('ai-optin').onchange=()=>{
 };
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&running)stop();});
 window.addEventListener('pagehide',stop);
-fetch('/api/status').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(s=>{aiConfigured=s.ai_configured;elevenlabsConfigured=s.elevenlabs_configured;$('ai-optin').disabled=!aiConfigured;$('provider').textContent=`${s.provider==='gemini'?'Gemini':'GPT'} · ${aiConfigured?'사용 가능':'키 필요'}`;$('ai-led').textContent=aiConfigured?'꺼짐':'키 필요';$('tts-mode').textContent=elevenlabsConfigured?'ElevenLabs → 기본 TTS':'브라우저 기본 TTS';}).catch(()=>{ $('ai-optin').disabled=true;$('provider').textContent='기기 내 모드';$('ai-led').textContent='미연결';notice('AI 서버에 연결하지 못했습니다. YOLO 감지와 기본 음성은 기기에서 사용할 수 있습니다.');});
+function chooseModel(provider){
+  selectionEpoch++;currentAssessment?.abort();currentAssessment=null;assessmentBusy=false;cancelSpeech();
+  selectedProvider=provider;
+  const label=({none:'물체 감지만',gemini:'Gemini',openai:'GPT'})[provider];
+  $('selected-model').textContent=label;$('ai-optin').checked=provider!=='none';
+  lastAnalysis=0;lastSceneAt=0;$('ai-led').textContent=provider==='none'?'꺼짐':'준비';
+  $('risk').className='risk unknown';$('risk-title').textContent=provider==='none'?'물체 감지':'분석 대기';
+  $('guidance').textContent=provider==='none'?'기기 내 감지와 물체 알림을 사용합니다.':`${label}로 장면을 분석합니다.`;
+  $('updated').textContent='';
+  for(const button of document.querySelectorAll('[data-provider]'))button.setAttribute('aria-pressed',String(button.dataset.provider===provider));
+  $('model-dialog').close();
+}
+$('choose-model').onclick=()=>$('model-dialog').showModal();
+for(const button of document.querySelectorAll('[data-provider]'))button.onclick=()=>chooseModel(button.dataset.provider);
+document.querySelector('[data-provider="none"]').setAttribute('aria-pressed','true');
+fetch('/api/status').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(s=>{
+  const providers=s.providers||{[s.provider]:s.ai_configured};
+  aiConfigured=!!(providers.gemini||providers.openai);elevenlabsConfigured=s.elevenlabs_configured;
+  $('ai-optin').disabled=!aiConfigured;
+  for(const provider of ['gemini','openai']){
+    document.querySelector(`[data-provider="${provider}"]`).disabled=!providers[provider];
+    $(provider==='gemini'?'gemini-state':'openai-state').textContent=providers[provider]?`${s.models?.[provider]||'서버 모델'} · 온라인`:'API 키 미설정';
+  }
+  $('provider').textContent=aiConfigured?'온라인 모델 사용 가능':'기기 내 모드';
+  $('tts-mode').textContent=elevenlabsConfigured?'ElevenLabs → 기본 TTS':'브라우저 기본 TTS';
+}).catch(()=>{
+  $('ai-optin').disabled=true;$('provider').textContent='서버 미연결';
+  $('gemini-state').textContent='서버 미연결';$('openai-state').textContent='서버 미연결';
+});

@@ -40,9 +40,9 @@ function upstreamError(status) {
 
 export async function onRequest({ request, env }) {
   const path=new URL(request.url).pathname;
-  const provider=env.AI_PROVIDER==='openai'?'openai':'gemini';
-  const key=provider==='gemini'?env.GEMINI_API_KEY:env.OPENAI_API_KEY;
-  if(path==='/api/status' && request.method==='GET')return json({provider,ai_configured:!!key,elevenlabs_configured:!!(env.ELEVENLABS_API_KEY&&env.ELEVENLABS_VOICE_ID)});
+  let provider=env.AI_PROVIDER==='openai'?'openai':'gemini';
+  let key=provider==='gemini'?env.GEMINI_API_KEY:env.OPENAI_API_KEY;
+  if(path==='/api/status' && request.method==='GET')return json({provider,ai_configured:!!key,providers:{gemini:!!env.GEMINI_API_KEY,openai:!!env.OPENAI_API_KEY},models:{gemini:env.GEMINI_MODEL||'gemini-3.1-flash-lite',openai:env.OPENAI_MODEL||'gpt-4.1-mini'},elevenlabs_configured:!!(env.ELEVENLABS_API_KEY&&env.ELEVENLABS_VOICE_ID)});
   if(!['/api/assess','/api/speech'].includes(path))return json({detail:'없는 API입니다.'},404);
   if(request.method!=='POST')return json({detail:'POST 요청이 필요합니다.'},405);
   const origin=request.headers.get('origin');
@@ -50,6 +50,11 @@ export async function onRequest({ request, env }) {
   let body;
   try {body=await bodyJson(request);}catch{return json({detail:'요청 본문이 잘못됐거나 너무 큽니다.'},400);}
   try {
+    if(path==='/api/assess'&&body?.provider!==undefined){
+      if(!['gemini','openai'].includes(body.provider))return json({detail:'지원하지 않는 모델입니다.'},400);
+      provider=body.provider;
+      key=provider==='gemini'?env.GEMINI_API_KEY:env.OPENAI_API_KEY;
+    }
     if(path==='/api/speech') {
       if(typeof body?.text!=='string'||body.text.length<1||body.text.length>300)return json({detail:'음성 문장은 1~300자여야 합니다.'},400);
       if(!env.ELEVENLABS_API_KEY||!env.ELEVENLABS_VOICE_ID)return json({detail:'기본 TTS를 사용합니다.'},503);

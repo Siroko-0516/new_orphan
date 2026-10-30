@@ -1,7 +1,10 @@
 export class BrowserYOLO {
   constructor() {
-    this.worker=new Worker(new URL('./yolo-worker.js',import.meta.url),{type:'module'});
     this.sequence=0;this.pending=new Map();
+  }
+  startWorker() {
+    if(this.worker)return;
+    this.worker=new Worker(new URL('./yolo-worker.js',import.meta.url),{type:'module'});
     this.worker.onmessage=({data})=>{
       const task=this.pending.get(data.id);if(!task)return;
       clearTimeout(task.timer);this.pending.delete(data.id);
@@ -15,6 +18,7 @@ export class BrowserYOLO {
   }
   request(type, bitmap) {
     if(this.broken)return Promise.reject(new Error('모델 실행이 중단됐습니다. 새로고침하세요.'));
+    this.startWorker();
     return new Promise((resolve,reject)=>{
       const id=++this.sequence;
       const timer=setTimeout(()=>this.fail(new Error('모델 실행 시간이 초과됐습니다. 새로고침하세요.')),type==='init'?120000:30000);

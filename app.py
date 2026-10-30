@@ -37,6 +37,7 @@ class DetectedObject(BaseModel):
 
 
 class Scene(Frame):
+    provider: str | None = Field(default=None, pattern='^(gemini|openai)$')
     detections: list[DetectedObject] = Field(default_factory=list, max_length=40)
 
 
@@ -98,6 +99,8 @@ async def status():
     provider = os.getenv('AI_PROVIDER', 'gemini')
     key = os.getenv('GEMINI_API_KEY' if provider == 'gemini' else 'OPENAI_API_KEY')
     return {'provider': provider, 'ai_configured': provider in ('gemini', 'openai') and bool(key),
+            'providers': {'gemini': bool(os.getenv('GEMINI_API_KEY')), 'openai': bool(os.getenv('OPENAI_API_KEY'))},
+            'models': {'gemini': os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite'), 'openai': os.getenv('OPENAI_MODEL', 'gpt-4.1-mini')},
             'elevenlabs_configured': bool(os.getenv('ELEVENLABS_API_KEY') and os.getenv('ELEVENLABS_VOICE_ID'))}
 
 
@@ -114,7 +117,7 @@ async def detection(frame: Frame):
 @app.post('/api/assess')
 async def assess(frame: Scene):
     _, encoded = decode_image(frame.image)
-    provider = os.getenv('AI_PROVIDER', 'gemini')
+    provider = frame.provider or os.getenv('AI_PROVIDER', 'gemini')
     if provider not in ('gemini', 'openai'):
         raise HTTPException(503, 'AI_PROVIDER를 gemini 또는 openai로 설정하세요.')
     key = os.getenv('GEMINI_API_KEY' if provider == 'gemini' else 'OPENAI_API_KEY')

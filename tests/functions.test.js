@@ -11,6 +11,21 @@ test('status never exposes secrets',async()=>{
   const response=await request('/api/status',undefined,{GEMINI_API_KEY:'secret-value'});
   const text=await response.text();assert.ok(!text.includes('secret-value'));assert.equal(JSON.parse(text).ai_configured,true);
 });
+
+test('selected provider overrides server default and uses its own key',async t=>{
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    assert.equal(url,'https://api.openai.com/v1/chat/completions');
+    assert.equal(options.headers.Authorization,'Bearer openai-test');
+    return Response.json({choices:[{message:{content:'{"level":"unknown","message":"판단 불가"}'}}]});
+  });
+  const response=await request('/api/assess',{image,provider:'openai'},{AI_PROVIDER:'gemini',GEMINI_API_KEY:'gemini-test',OPENAI_API_KEY:'openai-test'});
+  assert.equal(response.status,200);
+});
+test('missing selected key never silently falls back to another provider',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>{throw new Error('Must not call remote AI');});
+  assert.equal((await request('/api/assess',{image,provider:'openai'},{GEMINI_API_KEY:'test'})).status,503);
+  assert.equal((await request('/api/assess',{image,provider:'minicpm'},{GEMINI_API_KEY:'test'})).status,400);
+});
 test('no keys keeps local-only mode and speech fallback',async()=>{
   assert.equal((await request('/api/assess',{image})).status,503);
   assert.equal((await request('/api/speech',{text:'안내'})).status,503);
