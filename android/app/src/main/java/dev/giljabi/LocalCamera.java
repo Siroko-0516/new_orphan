@@ -13,24 +13,40 @@ final class LocalCamera {
         return n[0]==10||(n[0]==172&&n[1]>=16&&n[1]<=31)||(n[0]==192&&n[1]==168);
     }
     static byte[] firstJpeg(InputStream in,int limit) throws IOException {
-        ByteArrayOutputStream out=new ByteArrayOutputStream();int previous=-1;boolean started=false;byte[] buffer=new byte[4096];int count,read=0;
-        while((count=in.read(buffer))!=-1){
-            for(int i=0;i<count;i++){
-                int b=buffer[i]&255;if(++read>limit)throw new IOException("카메라 응답이 너무 큽니다.");
+        return new JpegReader(in,limit).next();
+    }
+    /** One buffered reader is retained for the whole MJPEG connection, including unread frames. */
+    static final class JpegReader {
+        private final InputStream input;
+        private final int limit;
+        JpegReader(InputStream input,int limit){this.input=new BufferedInputStream(input,8192);this.limit=limit;}
+        byte[] next() throws IOException {
+            ByteArrayOutputStream out=new ByteArrayOutputStream();int previous=-1,read=0,b;boolean started=false;
+            while((b=input.read())!=-1){
+                if(++read>limit)throw new IOException("카메라 프레임이 너무 큽니다.");
                 if(!started){if(previous==255&&b==216){started=true;out.write(255);out.write(216);}}
                 else{out.write(b);if(previous==255&&b==217)return out.toByteArray();}
                 previous=b;
             }
+            throw new IOException("완전한 JPEG 프레임을 받지 못했습니다. 카메라 주소와 전원을 확인하세요.");
         }
-        throw new IOException("완전한 JPEG 프레임이 없습니다. /capture 주소를 확인하세요.");
     }
-    static byte[] fetch(String address) throws IOException {
+    interface Connector { HttpURLConnection open(URL url) throws IOException; }
+    static Session open(String address,Connector connector) throws IOException {
         URL url=new URL(address);if(!isAllowed(url))throw new IOException("같은 네트워크의 사설 IPv4 카메라 주소를 입력하세요.");
-        HttpURLConnection connection=(HttpURLConnection)url.openConnection();connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(8000);connection.setReadTimeout(8000);
+        HttpURLConnection connection=connector.open(url);connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(8000);connection.setReadTimeout(8000);
         try{
             if(connection.getResponseCode()!=200)throw new IOException("카메라 HTTP 오류: "+connection.getResponseCode());
-            String type=connection.getContentType();if(type==null||!(type.toLowerCase().contains("image/jpeg")||type.toLowerCase().contains("multipart/")))throw new IOException("카메라가 JPEG 영상을 반환하지 않습니다.");
-            try(InputStream in=connection.getInputStream()){return firstJpeg(in,2*1024*1024);}
-        }finally{connection.disconnect();}
+            String type=connection.getContentType();if(type==null||!(type.toLowerCase(java.util.Locale.ROOT).contains("image/jpeg")||type.toLowerCase(java.util.Locale.ROOT).contains("multipart/")))throw new IOException("카메라가 JPEG 영상을 반환하지 않습니다.");
+            return new Session(connection,connection.getInputStream(),type.toLowerCase(java.util.Locale.ROOT).contains("multipart/"));
+        }catch(IOException|RuntimeException e){connection.disconnect();throw e;}
+    }
+    static byte[] fetch(String address) throws IOException {return fetch(address,url->(HttpURLConnection)url.openConnection());}
+    static byte[] fetch(String address,Connector connector) throws IOException {try(Session session=open(address,connector)){return session.reader.next();}}
+    static final class Session implements AutoCloseable {
+        final JpegReader reader;final boolean multipart;
+        private final HttpURLConnection connection;private final InputStream input;
+        Session(HttpURLConnection connection,InputStream input,boolean multipart){this.connection=connection;this.input=input;this.multipart=multipart;reader=new JpegReader(input,2*1024*1024);}
+        @Override public void close(){connection.disconnect();try{input.close();}catch(IOException ignored){}}
     }
 }

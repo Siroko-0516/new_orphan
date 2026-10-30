@@ -1,6 +1,6 @@
 # 길잡이 · 브라우저 카메라 안전 안내
 
-설치형 Android 로컬 VLM 시제품은 [android/README.md](android/README.md)를 참고하세요. 웹 앱과 분리된 프로젝트이며 MiniCPM 모델 파일을 직접 가져와 사진 단위로 분석합니다.
+설치형 Android 앱은 [android/README.md](android/README.md)를 참고하세요. 웹 앱과 분리된 프로젝트로 ESP32 실시간 YOLO 감지, MiniCPM 로컬 장면 설명, 오프라인 기본 TTS, HM-10 BLE 신호 전송을 제공합니다. 테스트 APK와 검증 범위는 [downloads/README.md](downloads/README.md)에 있습니다.
 
 **YOLO11n은 사용자 기기에서 실행**하며, 기본 음성 안내는 브라우저 TTS를 사용합니다. 카메라와 YOLO를 위한 Python 서버나 GPU 서버는 필요하지 않습니다.
 

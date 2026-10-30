@@ -27,4 +27,24 @@ public class LocalCameraTest {
     @Test(expected=IOException.class) public void boundsStreamReads() throws Exception {
         LocalCamera.firstJpeg(new ByteArrayInputStream(new byte[100]),20);
     }
+    @Test public void retainsAllFramesWhenOneSocketReadContainsSeveralFrames() throws Exception {
+        byte[] first={(byte)255,(byte)216,3,(byte)255,(byte)217};
+        byte[] second={(byte)255,(byte)216,4,5,(byte)255,(byte)217};
+        ByteArrayOutputStream encoded=new ByteArrayOutputStream();
+        encoded.write("--frame\r\nContent-Type: image/jpeg\r\n\r\n".getBytes("US-ASCII"));encoded.write(first);
+        encoded.write("\r\n--frame\r\n\r\n".getBytes("US-ASCII"));encoded.write(second);
+        LocalCamera.JpegReader reader=new LocalCamera.JpegReader(new ByteArrayInputStream(encoded.toByteArray()),100);
+        assertArrayEquals(first,reader.next());assertArrayEquals(second,reader.next());
+    }
+    @Test public void appliesSizeLimitPerFrameRatherThanEntireLiveConnection() throws Exception {
+        ByteArrayOutputStream encoded=new ByteArrayOutputStream();byte[] jpeg={(byte)255,(byte)216,3,(byte)255,(byte)217};
+        for(int i=0;i<100;i++)encoded.write(jpeg);
+        LocalCamera.JpegReader reader=new LocalCamera.JpegReader(new ByteArrayInputStream(encoded.toByteArray()),10);
+        for(int i=0;i<100;i++)assertArrayEquals(jpeg,reader.next());
+    }
+    @Test public void rejectsPublicDestinationBeforeOpeningConnection() throws Exception {
+        final boolean[] called={false};
+        try{LocalCamera.open("http://example.com/stream",url->{called[0]=true;throw new IOException();});fail("Public camera destination accepted");}
+        catch(IOException expected){assertFalse(called[0]);}
+    }
 }

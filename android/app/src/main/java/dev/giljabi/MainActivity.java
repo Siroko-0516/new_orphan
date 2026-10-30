@@ -1,13 +1,21 @@
 package dev.giljabi;
 
 import android.app.Activity;
+import android.Manifest;
+import android.bluetooth.BluetoothAdapter;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.media.ExifInterface;
 import android.net.Uri;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.StatFs;
 import android.os.SystemClock;
@@ -31,14 +39,14 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_MODEL=10, PICK_VISION=11, PICK_PHOTO=12, TAKE_PHOTO=13;
+    private static final int PICK_MODEL=10, PICK_VISION=11, PICK_PHOTO=12, TAKE_PHOTO=13, BLE_PERMISSIONS=20, ENABLE_BLUETOOTH=21;
     private final ExecutorService jobs=Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled=new AtomicBoolean();
     private final List<View> controls=new ArrayList<>();
     private TextView status,result,filesLabel;
-    private ImageView preview;
+    private DetectionView preview;
     private EditText prompt,ip;
-    private CheckBox speak,yoloEnabled;
+    private CheckBox speak,yoloEnabled,notifyObjects;
     private YoloDetector yolo;
     private Spinner language;
     private Button analyze,load,release,stop;
@@ -48,15 +56,51 @@ public final class MainActivity extends Activity {
     private Uri cameraUri;
     private TextToSpeech tts;
     private LlamaEngine engine;
-    private boolean initialized,loaded,busy,destroyed;
+    private boolean initialized,loaded,busy;
+    private volatile boolean destroyed;
+    private TextView liveStatus,bleStatus;
+    private Spinner bleDevices;
+    private EditText serviceUuid,characteristicUuid;
+    private Button liveStart,liveStop,bleScan,bleConnect,bleDisconnect,bleTest;
+    private BleLink ble;
+    private final List<BleLink.Device> foundDevices=new ArrayList<>();
+    private final ObstacleTracker tracker=new ObstacleTracker();
+    private final AtomicBoolean framePosted=new AtomicBoolean();
+    private LiveCamera live;
+    private int liveGeneration,imageRevision;
+    private boolean imageFromLive;
+    private List<YoloDetector.Box> displayedBoxes=Collections.emptyList();
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
         modelFile=new File(getFilesDir(),"model.gguf");visionFile=new File(getFilesDir(),"mmproj.gguf");
         ScrollView scroll=new ScrollView(this);LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,28,24,24);scroll.addView(root);setContentView(scroll);
         root.setOnApplyWindowInsetsListener((v,insets)->{root.setPadding(24,28+insets.getSystemWindowInsetTop(),24,24+insets.getSystemWindowInsetBottom());return insets;});
-        TextView title=text(root,"길잡이 · 로컬 사진 분석",22);title.setTextColor(Color.rgb(35,80,55));
-        text(root,"MiniCPM-V 4.7 1B · CPU 실행\n모델과 비전 파일을 직접 선택하세요. 한국어 표현은 실험적입니다.",14);
+        TextView title=text(root,"길잡이 · ESP 카메라",22);title.setTextColor(Color.rgb(35,80,55));
+        ip=new EditText(this);ip.setSingleLine(true);ip.setText("http://192.168.4.1:81/stream");root.addView(ip);controls.add(ip);
+        liveStart=button(root,"ESP 영상 + YOLO 시작",v->startLive());
+        liveStop=button(root,"ESP 영상 중지",v->stopLive());
+        liveStatus=text(root,"휴대폰을 ESP32-CAM Wi-Fi에 연결하세요. YOLO는 모델 선택 없이 시작할 수 있습니다.",14);
+        preview=new DetectionView(this);root.addView(preview,new LinearLayout.LayoutParams(-1,(int)(300*getResources().getDisplayMetrics().density)));
+        bleStatus=text(root,"아두이노 · HM-10 BLE 미연결",14);
+        bleDevices=new Spinner(this);root.addView(bleDevices);
+        ble=new BleLink(this,message->bleStatus.setText(message),devices->{
+            Object old=bleDevices.getSelectedItem();String selected=old==null?"":old.toString();
+            foundDevices.clear();foundDevices.addAll(devices);
+            bleDevices.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,foundDevices));
+            for(int i=0;i<foundDevices.size();i++)if(foundDevices.get(i).toString().equals(selected))bleDevices.setSelection(i);
+        },()->{tracker.reset();if(status!=null)updateControls();});
+        bleScan=button(root,"BLE 기기 검색",v->scanBle());
+        bleConnect=button(root,"선택한 BLE 기기 연결",v->{Object selected=bleDevices.getSelectedItem();if(selected instanceof BleLink.Device)ble.connect((BleLink.Device)selected,serviceUuid.getText().toString(),characteristicUuid.getText().toString());else bleStatus.setText("기기를 검색하고 HM-10을 선택하세요.");});
+        bleDisconnect=button(root,"BLE 연결 해제",v->{ble.disconnect();bleStatus.setText("BLE 연결 해제됨");});
+        bleTest=button(root,"아두이노 TEST 신호 보내기",v->ble.send("TEST\n"));
+        notifyObjects=new CheckBox(this);notifyObjects.setText("새 물체 감지 시 아두이노 신호 전송");root.addView(notifyObjects);
+        notifyObjects.setOnCheckedChangeListener((v,enabled)->tracker.reset());
+        LinearLayout advanced=new LinearLayout(this);advanced.setOrientation(LinearLayout.VERTICAL);advanced.setVisibility(View.GONE);
+        button(root,"BLE UUID 설정 열기/닫기",v->advanced.setVisibility(advanced.getVisibility()==View.GONE?View.VISIBLE:View.GONE));root.addView(advanced);
+        serviceUuid=new EditText(this);serviceUuid.setSingleLine(true);serviceUuid.setHint("Service UUID");serviceUuid.setText(BleLink.DEFAULT_SERVICE);advanced.addView(serviceUuid);
+        characteristicUuid=new EditText(this);characteristicUuid.setSingleLine(true);characteristicUuid.setHint("Write characteristic UUID");characteristicUuid.setText(BleLink.DEFAULT_CHARACTERISTIC);advanced.addView(characteristicUuid);
+        text(root,"로컬 AI · MiniCPM-V 4.7 1B",19);
         filesLabel=text(root,"",13);refreshFiles();
         button(root,"1. 언어 모델 GGUF 선택",v->pick(PICK_MODEL,"*/*"));
         button(root,"2. 비전 mmproj GGUF 선택",v->pick(PICK_VISION,"*/*"));
@@ -64,9 +108,7 @@ public final class MainActivity extends Activity {
         release=button(root,"모델 메모리 해제",v->runJob(()->{unload();ui(()->setStatus("모델 메모리를 해제했습니다."));}));
         button(root,"사진 선택",v->pick(PICK_PHOTO,"image/*"));
         button(root,"카메라 촬영",v->takePhoto());
-        ip=new EditText(this);ip.setSingleLine(true);ip.setHint("ESP32 사진 주소 http://192.168.4.1/capture");root.addView(ip);controls.add(ip);
-        button(root,"ESP32 사진 한 장 받기",v->{String address=ip.getText().toString().trim();runJob(()->{byte[] jpeg=LocalCamera.fetch(address);checkCancelled();setPicture(decodeImage(new ByteArrayInputStream(jpeg),1));});});
-        preview=new ImageView(this);preview.setAdjustViewBounds(true);preview.setMaxHeight(700);root.addView(preview);
+        button(root,"ESP32 사진 한 장 받기",v->{String address=ip.getText().toString().trim();stopLive();runJob(()->{byte[] jpeg=LocalCamera.fetch(address,wifiConnector());checkCancelled();setPicture(decodeImage(new ByteArrayInputStream(jpeg),1));});});
         language=new Spinner(this);language.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"English · 설명 품질 확인","한국어 · 실험"}));root.addView(language);controls.add(language);
         prompt=new EditText(this);prompt.setMinLines(3);prompt.setText("Describe the main visible objects and their positions. Mention visible obstacles. Do not guess distance, motion or collision risk. Use two short sentences.");root.addView(prompt);controls.add(prompt);
         language.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
@@ -79,7 +121,7 @@ public final class MainActivity extends Activity {
         analyze=button(root,"기기에서 사진 분석",v->analyze());
         stop=new Button(this);stop.setText("중지 요청");stop.setEnabled(false);root.addView(stop);stop.setOnClickListener(v->{cancelled.set(true);if(tts!=null)tts.stop();setStatus("중지 요청됨 · 현재 네이티브 연산이 끝나면 중지합니다.");});
         status=text(root,"사진과 모델을 준비하세요.",14);result=text(root,"",18);result.setTextIsSelectable(true);
-        text(root,"사진 분석은 기기에서 실행됩니다. ESP32 연결은 같은 네트워크의 사설 IPv4 주소만 허용합니다. 이 버전은 사진 단위 분석이며 실시간 스트림·Gemini·ElevenLabs는 아직 연결하지 않았습니다. 결과는 틀릴 수 있으며 안전을 보장하지 않습니다.",12);
+        text(root,"YOLO·장면 설명·기본 음성은 기기에서 실행됩니다. 새 물체 알림은 거리나 충돌 위험을 측정하지 않습니다. 한국어 장면 설명은 실험적입니다.",12);
         tts=new TextToSpeech(this,code->{if(code!=TextToSpeech.SUCCESS)ui(()->setStatus("기본 TTS 초기화 실패 · 화면 결과를 확인하세요."));});
         updateControls();
     }
@@ -92,8 +134,58 @@ public final class MainActivity extends Activity {
         for(View v:controls)v.setEnabled(!busy);
         load.setEnabled(!busy&&!loaded&&modelFile.exists()&&visionFile.exists());
         release.setEnabled(!busy&&loaded);analyze.setEnabled(!busy&&loaded&&imageBytes!=null);stop.setEnabled(busy);
-        if(busy)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        liveStart.setEnabled(!busy&&live==null);liveStop.setEnabled(live!=null);ip.setEnabled(!busy&&live==null);
+        bleScan.setEnabled(true);bleConnect.setEnabled(true);bleDisconnect.setEnabled(true);bleTest.setEnabled(ble.isReady());
+        if(busy||live!=null)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
+    private LocalCamera.Connector wifiConnector() throws IOException {
+        ConnectivityManager manager=getSystemService(ConnectivityManager.class);
+        if(manager!=null)for(Network network:manager.getAllNetworks()){
+            NetworkCapabilities capabilities=manager.getNetworkCapabilities(network);
+            if(capabilities!=null&&capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))return url->(HttpURLConnection)network.openConnection(url);
+        }
+        throw new IOException("휴대폰을 ESP32-CAM Wi-Fi에 연결하고, 인터넷이 없어도 연결을 유지하세요.");
+    }
+    private void startLive(){
+        if(busy||live!=null)return;String address=ip.getText().toString().trim();
+        try{
+            LocalCamera.Connector connector=wifiConnector();int generation=++liveGeneration;tracker.reset();
+            liveStatus.setText("ESP 영상 연결 및 YOLO 준비 중...");
+            live=new LiveCamera(this,address,connector,jpeg->decodeImage(new ByteArrayInputStream(jpeg),1),frame->onLiveFrame(generation,frame),message->ui(()->{if(generation==liveGeneration){stopLive();liveStatus.setText("영상 중지: "+message);}}));
+            updateControls();
+        }catch(Exception e){liveStatus.setText(e.getMessage());}
+    }
+    private void onLiveFrame(int generation,LiveCamera.Frame frame){
+        if(destroyed||!framePosted.compareAndSet(false,true)){frame.bitmap.recycle();return;}
+        runOnUiThread(()->{
+            framePosted.set(false);
+            if(destroyed||live==null||generation!=liveGeneration){frame.bitmap.recycle();return;}
+            Bitmap old=imageBitmap;imageBitmap=frame.bitmap;imageBytes=frame.jpeg;displayedBoxes=frame.boxes;imageFromLive=true;imageRevision++;
+            preview.update(imageBitmap,displayedBoxes);if(old!=null&&old!=imageBitmap)old.recycle();
+            YoloDetector.Box event=tracker.update(frame.boxes,SystemClock.elapsedRealtime());
+            String signal="";
+            if(event!=null&&notifyObjects.isChecked()&&ble.isReady()&&ble.send("OBSTACLE\n"))signal=" · 새 물체 신호 요청: "+YoloDetector.LABELS[event.label];
+            liveStatus.setText(String.format(Locale.ROOT,"수신 %.1f FPS · YOLO %dms · 물체 %d개%s",frame.receiveFps,frame.detectionMs,frame.boxes.size(),signal));
+            updateControls();
+        });
+    }
+    private void stopLive(){liveGeneration++;LiveCamera old=live;live=null;if(old!=null)old.close();tracker.reset();if(liveStatus!=null)liveStatus.setText("ESP 영상 중지됨");if(status!=null)updateControls();}
+    private boolean hasBlePermissions(){
+        if(Build.VERSION.SDK_INT>=31)return checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED;
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+    }
+    private void scanBle(){
+        if(!hasBlePermissions()){
+            requestPermissions(Build.VERSION.SDK_INT>=31?new String[]{Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT}:new String[]{Manifest.permission.ACCESS_FINE_LOCATION},BLE_PERMISSIONS);return;
+        }
+        try{
+            BluetoothAdapter adapter=ble.adapter();if(adapter==null){bleStatus.setText("이 기기는 블루투스를 지원하지 않습니다.");return;}
+            if(!adapter.isEnabled()){startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),ENABLE_BLUETOOTH);return;}
+            if(Build.VERSION.SDK_INT<31){LocationManager location=getSystemService(LocationManager.class);if(location!=null&&!location.isProviderEnabled(LocationManager.GPS_PROVIDER)&&!location.isProviderEnabled(LocationManager.NETWORK_PROVIDER)){bleStatus.setText("Android 11 이하에서는 위치 서비스를 켜고 다시 BLE 검색을 눌러주세요.");return;}}
+            ble.scan();
+        }catch(SecurityException e){bleStatus.setText("주변 기기 권한을 허용하세요.");}
+    }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==BLE_PERMISSIONS){if(hasBlePermissions())scanBle();else bleStatus.setText("BLE 사용에 필요한 권한이 허용되지 않았습니다.");}}
     private interface Task {void run() throws Exception;}
     private void runJob(Task task){
         if(busy)return;busy=true;cancelled.set(false);updateControls();
@@ -104,8 +196,9 @@ public final class MainActivity extends Activity {
         });
     }
     private void checkCancelled(){if(cancelled.get()||destroyed)throw new CancellationException();}
-    private void pick(int request,String type){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType(type);intent.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(intent,request);}
+    private void pick(int request,String type){stopLive();Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType(type);intent.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(intent,request);}
     private void takePhoto(){
+        stopLive();
         File folder=new File(getCacheDir(),"photos");folder.mkdirs();File photo=new File(folder,"camera.jpg");
         cameraUri=FileProvider.getUriForFile(this,getPackageName()+".photos",photo);
         Intent capture=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);capture.putExtra(MediaStore.EXTRA_OUTPUT,cameraUri);capture.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -113,6 +206,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int response,Intent data){
         super.onActivityResult(request,response,data);if(response!=RESULT_OK)return;
+        if(request==ENABLE_BLUETOOTH){scanBle();return;}
         Uri uri=request==TAKE_PHOTO?cameraUri:(data==null?null:data.getData());if(uri==null)return;
         if(request==PICK_MODEL||request==PICK_VISION){File target=request==PICK_MODEL?modelFile:visionFile;runJob(()->importModel(uri,target));}
         else runJob(()->{
@@ -151,25 +245,34 @@ public final class MainActivity extends Activity {
     private void require(int code,String action){if(code!=0)throw new IllegalStateException(action+" 실패 ("+code+"). 파일 조합과 엔진 호환성을 확인하세요.");}
     private void unload(){if(loaded&&engine!=null){engine.unload();loaded=false;}if(yolo!=null){try{yolo.close();}catch(Exception ignored){}yolo=null;}}
     private void analyze(){
+        if(busy||!loaded||imageBitmap==null||imageBytes==null)return;
         String question=prompt.getText().toString().trim();if(question.isEmpty()){setStatus("질문을 입력하세요.");return;}
-        boolean read=speak.isChecked(),useYolo=yoloEnabled.isChecked();runJob(()->{
+        boolean read=speak.isChecked(),useYolo=yoloEnabled.isChecked(),cached=imageFromLive;
+        final Bitmap snapshot=imageBitmap.copy(Bitmap.Config.ARGB_8888,false);
+        if(snapshot==null){setStatus("분석용 사진을 준비하지 못했습니다.");return;}
+        byte[] jpeg=imageBytes;List<YoloDetector.Box> observations=new ArrayList<>(displayedBoxes);int revision=imageRevision;
+        runJob(()->{try{
             long start=SystemClock.elapsedRealtime();ui(()->{result.setText("");setStatus("사진 분석 중 · CPU 실행");});
             String yoloResult="";
             if(useYolo){
-                if(yolo==null)yolo=new YoloDetector(this);
-                checkCancelled();yoloResult=yolo.describe(imageBitmap);checkCancelled();
+                checkCancelled();List<YoloDetector.Box> boxes;
+                if(cached)boxes=observations;
+                else{if(yolo==null)yolo=new YoloDetector(this);boxes=yolo.detect(snapshot);}
+                yoloResult=YoloDetector.describe(boxes);checkCancelled();
+                List<YoloDetector.Box> detectedBoxes=boxes;
+                ui(()->{if(!cancelled.get()&&revision==imageRevision){displayedBoxes=detectedBoxes;preview.update(imageBitmap,detectedBoxes);}});
                 String detected=yoloResult;ui(()->{if(!cancelled.get())setStatus("YOLO: "+detected+"\n장면 분석 중...");});
             }
             engine.fullReset();checkCancelled();
             require(engine.processSystemPrompt("Describe only visible evidence. Do not invent objects, motion, distance, or safety guarantees. If uncertain, say so."),"시스템 질문 처리");checkCancelled();
-            require(engine.prefillImage(imageBytes,imageBytes.length),"이미지 처리");checkCancelled();
+            require(engine.prefillImage(jpeg,jpeg.length),"이미지 처리");checkCancelled();
             String fullQuestion=question+(useYolo?"\nYOLO auxiliary observations (may be wrong, boxes are normalized image coordinates): "+yoloResult:"");
             require(engine.processUserPrompt(fullQuestion,192),"질문 처리");
             StringBuilder answer=new StringBuilder();
             for(int i=0;i<384;i++){checkCancelled();String token=engine.generateNextToken();if(token==null)break;answer.append(token);String partial=answer.toString();ui(()->{if(!cancelled.get())result.setText(partial);});}
             checkCancelled();String value=answer.toString().replaceAll("(?s)<think>.*?</think>","").trim();if(value.isEmpty())throw new IOException("빈 답변입니다. 질문 또는 모델 파일을 확인하세요.");
             long elapsed=SystemClock.elapsedRealtime()-start;ui(()->{if(cancelled.get())return;result.setText(value);setStatus(String.format(Locale.ROOT,"분석 완료 · %.1f초 · 로컬 실행",elapsed/1000.0));if(read)say(value);});
-        });
+        }finally{snapshot.recycle();}});
     }
     private void say(String value){
         if(tts==null)return;Locale locale=value.matches("(?s).*[가-힣].*")?Locale.KOREAN:Locale.ENGLISH;
@@ -192,12 +295,13 @@ public final class MainActivity extends Activity {
         float scale=Math.min(1f,768f/Math.max(rotated.getWidth(),rotated.getHeight()));Bitmap resized=Bitmap.createScaledBitmap(rotated,Math.max(1,Math.round(rotated.getWidth()*scale)),Math.max(1,Math.round(rotated.getHeight()*scale)),true);if(resized!=rotated)rotated.recycle();return resized;
     }
     private void setPicture(Bitmap bitmap) throws IOException {
-        checkCancelled();ByteArrayOutputStream bytes=new ByteArrayOutputStream();if(!bitmap.compress(Bitmap.CompressFormat.JPEG,90,bytes))throw new IOException("사진 변환 실패");imageBytes=bytes.toByteArray();
-        ui(()->{Bitmap old=imageBitmap;imageBitmap=bitmap;preview.setImageBitmap(bitmap);if(old!=null&&old!=bitmap)old.recycle();setStatus("사진 준비 완료 · "+bitmap.getWidth()+"×"+bitmap.getHeight());});
+        checkCancelled();ByteArrayOutputStream bytes=new ByteArrayOutputStream();if(!bitmap.compress(Bitmap.CompressFormat.JPEG,90,bytes))throw new IOException("사진 변환 실패");byte[] jpeg=bytes.toByteArray();
+        runOnUiThread(()->{if(destroyed||cancelled.get()){bitmap.recycle();return;}Bitmap old=imageBitmap;imageBitmap=bitmap;imageBytes=jpeg;imageFromLive=false;imageRevision++;displayedBoxes=Collections.emptyList();preview.update(bitmap,displayedBoxes);if(old!=null&&old!=bitmap)old.recycle();setStatus("사진 준비 완료 · "+bitmap.getWidth()+"×"+bitmap.getHeight());});
     }
-    @Override protected void onStop(){cancelled.set(true);if(tts!=null)tts.stop();super.onStop();}
+    @Override protected void onStop(){cancelled.set(true);stopLive();if(ble!=null)ble.close();if(tts!=null)tts.stop();super.onStop();}
     @Override protected void onDestroy(){
         destroyed=true;cancelled.set(true);if(tts!=null){tts.stop();tts.shutdown();}
+        stopLive();if(ble!=null)ble.close();
         jobs.execute(()->{unload();if(initialized&&engine!=null)engine.shutdown();});jobs.shutdown();super.onDestroy();
     }
 }

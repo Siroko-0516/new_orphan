@@ -22,7 +22,7 @@ final class YoloDetector implements AutoCloseable {
             session=environment.createSession(model,options);
         }
     }
-    String describe(Bitmap image) throws Exception {
+    List<Box> detect(Bitmap image) throws Exception {
         float scale=Math.min((float)SIZE/image.getWidth(),(float)SIZE/image.getHeight());
         Bitmap input=Bitmap.createBitmap(SIZE,SIZE,Bitmap.Config.ARGB_8888);
         Canvas canvas=new Canvas(input);canvas.drawColor(Color.rgb(114,114,114));
@@ -34,11 +34,14 @@ final class YoloDetector implements AutoCloseable {
         try(OnnxTensor data=OnnxTensor.createTensor(environment,FloatBuffer.wrap(tensor),new long[]{1,3,SIZE,SIZE});
             OrtSession.Result result=session.run(Collections.singletonMap(session.getInputNames().iterator().next(),data))){
             float[][] output=((float[][][])result.get(0).getValue())[0];
-            List<Box> boxes=decode(output,image.getWidth(),image.getHeight());
-            StringBuilder description=new StringBuilder();
-            for(Box b:boxes){if(description.length()>0)description.append("; ");description.append(String.format(Locale.ROOT,"%s %.0f%% box=[%.2f,%.2f,%.2f,%.2f]",LABELS[b.label],b.score*100,b.xy[0],b.xy[1],b.xy[2],b.xy[3]));}
-            return description.length()==0?"No objects detected (does not mean the scene is safe).":description.toString();
+            return decode(output,image.getWidth(),image.getHeight());
         }
+    }
+    String describe(Bitmap image) throws Exception {return describe(detect(image));}
+    static String describe(List<Box> boxes){
+        StringBuilder description=new StringBuilder();
+        for(Box b:boxes){if(description.length()>0)description.append("; ");description.append(String.format(Locale.ROOT,"%s %.0f%% box=[%.2f,%.2f,%.2f,%.2f]",LABELS[b.label],b.score*100,b.xy[0],b.xy[1],b.xy[2],b.xy[3]));}
+        return description.length()==0?"No objects detected (does not mean the scene is safe).":description.toString();
     }
     static final class Box {
         final int label;final float score;final float[] xy;
