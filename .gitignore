@@ -4,6 +4,12 @@ __pycache__/
 .pytest_cache/
 models/
 *.log
+android/.gradle/
+android/**/build/
+android/**/.cxx/
+android/local.properties
+android/third_party/llama.cpp-omni/
+android/*.jks
 node_modules/
 dist/
 .wrangler/

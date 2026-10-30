@@ -1,0 +1,5 @@
+# Native dependency provenance
+
+JNI bridge `app/src/main/cpp/llama_jni.cpp` and `logging.h` are adapted from OpenBMB/MiniCPM-V-Apps commit `d0dd7a6074b950081d6303977efb646f2f85bb5b`, MIT license in MiniCPM-LICENSE. Changes: temperature 0.1, clearing freed native pointers/batch to support repeated imports and releases, and raising a Java exception if context reset fails. Kotlin downloader/UI code is not included.
+
+Engine: `tc-mb/llama.cpp-omni`, commit `e0eca9d8f57ac8f5a5ad6191a8007b93436c1e71`, the official demo's gitlink at the commit above. Downloaded archive SHA-256: `3ce1d3938dcd52561295253eac8708311cff2996c6a4b34982353fe832f9a195`. Kept outside Git; prepare_engine.py verifies the pinned archive then applies patch_engine.py. The patch guards two Darwin-only F_NOCACHE hints that otherwise fail to compile on Android. It does not change the dense 1B model's inference. The engine and bundled dependencies retain their own license files. Model weights are not included in the APK or repository and retain their own licenses.
