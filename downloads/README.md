@@ -1,6 +1,24 @@
 # 길잡이 테스트 APK
 
-## 최신 · 로컬 AI / Gemini 선택 · 0.4.0-full
+## 최신 · 자동 AI 분석 / 백그라운드 실행 · 0.5.0-full
+
+**[giljabi-0.5.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.0-full/giljabi-0.5.0-full-debug.apk)** · [릴리스와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.5.0-full)
+
+로컬 MiniCPM 모델 두 파일을 포함한 약 **1.8GB** APK입니다. Android 8 이상 ARM64용이며 설치·첫 AI 준비에 내부 여유 공간 6GB 이상을 권장합니다.
+
+1. APK를 휴대폰에 내려받아 설치합니다. 이번 APK는 이전 공개 0.4.0 및 개발 환경의 로컬 0.5.0 APK와 서명이 달라 기존 앱을 삭제한 뒤 설치해야 합니다. 삭제하면 설정·저장한 API 키·준비된 모델 복사본도 삭제됩니다. 내장 모델은 첫 사용 시 다시 준비됩니다.
+2. 휴대폰을 ESP32-CAM Wi-Fi에 연결하고 앱 주소를 `http://192.168.4.1:81/stream`으로 둡니다. 브라우저 카메라 스트림 탭을 닫습니다.
+3. 앱 상단에서 **로컬 AI · 오프라인 / 클라우드 AI · Gemini** 중 하나를 선택합니다. Gemini는 앱에 본인 API 키를 입력하고 ESP Wi-Fi와 별도로 모바일 데이터 등 인터넷 연결이 필요합니다.
+4. 질문·언어·음성·최소 분석 시작 간격을 정하고 **실시간 AI + 백그라운드 시작**을 누릅니다. ESP 영상·YOLO·선택한 AI의 반복 설명이 함께 실행됩니다. 화면을 벗어나도 서비스가 이어서 처리하도록 구성했습니다.
+5. 종료는 앱의 **실시간 / 백그라운드 중지** 또는 실행 알림의 **중지**를 누릅니다. 알림을 허용하면 실행 상태와 중지 버튼을 알림창에서 사용할 수 있습니다.
+
+한 번에 한 장면만 분석하고, 이전 분석이 끝난 뒤 새 프레임을 사용합니다. 기본 5초 간격은 5초마다 결과가 나온다는 뜻이 아닙니다. 실행 중 로컬/Gemini를 바꾸면 이전 결과를 버리고 새 모드로 계속 처리합니다. **Gemini 자동 실행 중에는 화면이 꺼져 있어도 사진·질문·YOLO 관측을 Google로 반복 전송하며 데이터·API 요금이 발생할 수 있습니다.** 다른 모드로 자동 전환하지 않습니다.
+
+HM-10도 쓰려면 자동 실행 전 BLE 검색·선택·연결·TEST 수신을 확인하고 새 물체 신호 체크박스를 켭니다. 서비스가 선택한 BLE 연결을 유지·재시도하고 YOLO 이벤트에 `OBSTACLE\n`을 보냅니다. 강제 중지·재부팅 뒤 자동 실행하지 않으며 제조사 절전·메모리 회수로 종료될 수 있습니다.
+
+빌드·Lint·JVM 테스트 **60개**와 내장 모델 해시·APK 서명을 검사했습니다. 실제 Android의 화면 끄기·장시간 실행·동시 네트워크·RAM·AI 속도·BLE·TTS는 실기기 확인이 필요합니다. [설정·중지·제약](../android/BACKGROUND.md) · [검증 기록](../android/BACKGROUND_VALIDATION.md).
+
+## 이전 · 로컬 AI / Gemini 선택 · 0.4.0-full
 
 **[giljabi-0.4.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.4.0-full/giljabi-0.4.0-full-debug.apk)** · [릴리스와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.4.0-full)
 

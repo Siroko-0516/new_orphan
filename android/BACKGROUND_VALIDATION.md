@@ -22,8 +22,17 @@ Gemini 요청에만 암호화 저장소에서 읽은 개인 키를 사용하며 
 
 이전 0.4.0에서 수행한 개발 서버의 실제 Gemini API HTTP 200 확인은 [당시 검증 기록](DUAL_AI_VALIDATION.md)에 있습니다. 이번 서비스의 Android 동작 검증을 대신하지 않습니다.
 
-## 배포 상태
+## 공개 배포 파일 검증
 
-설치 파일은 개발 환경의 `/workspace/shared/downloads/giljabi-0.5.0-full-debug.apk`에 준비했습니다. 로컬 APK의 서명은 기존 GitHub 0.4.0 배포와 다릅니다. 기존 앱 삭제 후 설치해야 하며 개인 설정·API 키·모델 복사본이 삭제됩니다. 모델 원본은 APK에 있어 첫 사용 시 다시 준비합니다.
+[GitHub Actions 41216746568](https://github.com/Siroko-0516/new_orphan/actions/runs/41216746568)의 `android-v0.5.0-full` 태그 소스 `c675d85`에서 빌드·테스트·Lint와 공개 업로드가 성공했습니다. 공개 릴리스 URL에서 APK와 `.sha256`을 실제 내려받아 따로 검사했습니다.
 
-공개 업로드는 사용자 승인 후 `android-v0.5.0-full` 태그의 GitHub Actions에서 동일 소스를 다시 빌드해 배포합니다. 배포 APK의 해시·서명은 로컬 빌드와 별도로 확인해 기록합니다.
+- 배포 APK 크기: **1805294252 bytes**.
+- SHA-256: `160d1b4dbb1fc2faf80f09271c1c6550a86774d43c15336186aed805072b1816`. 릴리스에 게시한 체크섬과 일치.
+- 인증서 SHA-256: `f8eb45f87c10d43a1d14c2617fcd7e4be4410d13da95e07b1471cdf54255ee48`.
+- 버전 `0.5.0-full` / versionCode 6, APK v2 서명과 16KB ZIP 정렬 통과.
+- 내장 언어·비전 모델의 무압축 저장, 크기·SHA-256이 위의 고정 사양과 일치.
+- 최종 APK manifest에 비공개 모니터링 서비스와 foreground service·알림·wake/Wi-Fi 권한 포함.
+
+이번 공개 APK는 이전 공개 0.4.0 APK와 개발 환경에서 제공한 로컬 0.5.0 APK 모두와 서명이 다릅니다. 기존 앱 삭제 후 설치해야 하며 설정·저장된 API 키·모델 복사본이 삭제됩니다. 내장 원본 모델은 첫 사용 시 다시 준비합니다. 디버그 키 캐시만으로 서로 다른 태그 간 서명 유지를 보장하지 않습니다.
+
+[APK 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.0-full/giljabi-0.5.0-full-debug.apk) · [릴리스와 체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.5.0-full).
