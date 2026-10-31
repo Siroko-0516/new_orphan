@@ -3,11 +3,16 @@ on:
   push:
     tags:
       - 'android-v*-full'
+    branches:
+      - main
+    paths:
+      - android/FULL_RELEASE_NOTES.md
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   full-apk:
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -72,3 +77,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · 로컬 AI / Gemini 선택' --notes-file android/FULL_RELEASE_NOTES.md
+  release-notes:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Find release tag for the documented app version
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re
+          source=Path('android/app/build.gradle.kts').read_text()
+          line=next(line for line in source.splitlines() if 'versionName =' in line)
+          version=re.search(r'"([0-9]+\.[0-9]+\.[0-9]+)-full"',line).group(1)
+          with open(os.environ['GITHUB_ENV'],'a') as output:
+              output.write('GILJABI_NOTES_TAG=android-v'+version+'-full\n')
+          PY
+      - name: Update published installation notes without rebuilding the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GILJABI_NOTES_TAG" >/dev/null 2>&1; then
+            gh release edit "$GILJABI_NOTES_TAG" --notes-file android/FULL_RELEASE_NOTES.md
+          else
+            echo 'No published release yet; notes will be included when the release is created.'
+          fi

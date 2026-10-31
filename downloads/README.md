@@ -1,6 +1,21 @@
 # 길잡이 테스트 APK
 
-## 로컬 AI 모델 내장 · 0.3.0-full
+## 최신 · 로컬 AI / Gemini 선택 · 0.4.0-full
+
+**[giljabi-0.4.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.4.0-full/giljabi-0.4.0-full-debug.apk)** · [릴리스와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.4.0-full)
+
+앱 상단에서 **로컬 AI · 오프라인 / 클라우드 AI · Gemini** 두 가지 중 하나를 선택합니다. 로컬 모델 두 파일은 계속 APK에 포함되어 별도 선택·다운로드가 필요 없습니다. 설치 파일은 약 1.8GB이며 내부 여유 공간 6GB 이상을 권장합니다.
+
+1. 인터넷 연결에서 APK를 휴대폰에 내려받습니다. **이번 0.4.0 배포 APK는 이전 0.3.0 배포 APK와 서명이 달라 기존 앱을 삭제한 뒤 설치해야 합니다.** 삭제하면 앱 내부 데이터와 준비된 모델 복사본도 삭제됩니다. 새 APK에 모델이 들어 있으므로 첫 준비 후 다시 사용할 수 있습니다.
+2. 로컬은 **로컬 AI** 선택 → 사진 준비 → **기기에서 사진 분석**. 인터넷과 API 키가 필요 없습니다.
+3. Gemini는 앱의 **Gemini API 키 · 모델 설정**에 본인 키 입력 → **클라우드 AI · Gemini** 선택 → 사진 준비 → **Gemini로 사진 분석**. 사진·질문이 Google로 전송되고 인터넷·할당량이 필요하며 요금이 발생할 수 있습니다. 키를 채팅에 보내지 마세요.
+4. ESP Wi-Fi에 연결한 상태에서 Gemini도 쓰려면 모바일 데이터 등 별도 인터넷 연결을 켜야 합니다. 카메라 Wi-Fi 연결은 유지합니다.
+
+기본 Gemini 모델은 `gemini-3.1-flash-lite`입니다. 모드 선택은 저장하고, 분석 버튼을 누른 때에만 사진 한 장을 처리합니다. 실패 시 다른 모드로 자동 전환하지 않습니다. YOLO·BLE·기본 오프라인 음성은 휴대폰에서 실행합니다.
+
+빌드·Lint·JVM 테스트 53개와 실제 Gemini 사진 요청(개발 환경에서 HTTP 200·한국어 응답)을 확인했습니다. 배포 파일의 APK 서명·체크섬·내장 모델도 확인했습니다. 실제 Android Keystore, ESP Wi-Fi/모바일 데이터 동시 연결과 휴대폰 RAM·속도·BLE·음성은 실기기 확인이 필요합니다. [사용 안내](../android/AI_MODES.md) · [검증 기록](../android/DUAL_AI_VALIDATION.md).
+
+## 이전 로컬 AI 모델 내장 · 0.3.0-full
 
 **[giljabi-0.3.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.3.0-r3-full/giljabi-0.3.0-full-debug.apk)** · [릴리스 안내와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.3.0-r3-full)
 
