@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.content.Intent;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -27,6 +29,8 @@ import android.speech.tts.Voice;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.*;
+import android.text.InputType;
+import android.app.AlertDialog;
 import androidx.core.content.FileProvider;
 import com.example.minicpm_v_demo.LlamaEngine;
 import java.io.*;
@@ -49,6 +53,15 @@ public final class MainActivity extends Activity {
     private CheckBox speak,yoloEnabled,notifyObjects;
     private YoloDetector yolo;
     private Spinner language;
+    private RadioGroup aiModes;
+    private RadioButton localMode,cloudMode;
+    private TextView providerHelp;
+    private LinearLayout localPanel;
+    private SharedPreferences settings;
+    private ApiKeyStore apiKeys;
+    private volatile GeminiClient.Request cloudRequest;
+    private static final String DEFAULT_EN="Describe the main visible objects and their positions. Mention visible obstacles. Do not guess distance, motion or collision risk. Use two short sentences in English.";
+    private static final String DEFAULT_KO="사진의 주요 물체, 화면상 위치, 눈에 보이는 장애물을 한국어 두 문장으로 설명하세요. 한자와 영어를 섞지 마세요. 거리·움직임·충돌은 추측하지 마세요.";
     private Button analyze,load,release,stop;
     private File modelFile,visionFile;
     private BundledModels bundledModels;
@@ -76,6 +89,7 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
+        settings=getSharedPreferences("ai-settings",Context.MODE_PRIVATE);apiKeys=new ApiKeyStore(this);
         modelFile=new File(getFilesDir(),"model.gguf");visionFile=new File(getFilesDir(),"mmproj.gguf");
         if(BuildConfig.BUNDLED_AI){
             try{
@@ -87,6 +101,13 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,28,24,24);scroll.addView(root);setContentView(scroll);
         root.setOnApplyWindowInsetsListener((v,insets)->{root.setPadding(24,28+insets.getSystemWindowInsetTop(),24,24+insets.getSystemWindowInsetBottom());return insets;});
         TextView title=text(root,"길잡이 · ESP 카메라",22);title.setTextColor(Color.rgb(35,80,55));
+        text(root,"장면 설명 AI 선택",18);
+        aiModes=new RadioGroup(this);aiModes.setOrientation(RadioGroup.HORIZONTAL);root.addView(aiModes);
+        localMode=new RadioButton(this);localMode.setId(View.generateViewId());localMode.setText("로컬 AI · 오프라인");RadioGroup.LayoutParams localLayout=new RadioGroup.LayoutParams(0,-2);localLayout.weight=1;aiModes.addView(localMode,localLayout);controls.add(localMode);
+        cloudMode=new RadioButton(this);cloudMode.setId(View.generateViewId());cloudMode.setText("클라우드 AI · Gemini");RadioGroup.LayoutParams cloudLayout=new RadioGroup.LayoutParams(0,-2);cloudLayout.weight=1;aiModes.addView(cloudMode,cloudLayout);controls.add(cloudMode);
+        aiModes.check(settings.getBoolean("cloud",false)?cloudMode.getId():localMode.getId());
+        providerHelp=text(root,"",14);
+        button(root,"Gemini API 키 · 모델 설정",v->cloudSettings());
         ip=new EditText(this);ip.setSingleLine(true);ip.setText("http://192.168.4.1:81/stream");root.addView(ip);controls.add(ip);
         liveStart=button(root,"ESP 영상 + YOLO 시작",v->startLive());
         liveStop=button(root,"ESP 영상 중지",v->stopLive());
@@ -111,37 +132,77 @@ public final class MainActivity extends Activity {
         button(root,"BLE UUID 설정 열기/닫기",v->advanced.setVisibility(advanced.getVisibility()==View.GONE?View.VISIBLE:View.GONE));root.addView(advanced);
         serviceUuid=new EditText(this);serviceUuid.setSingleLine(true);serviceUuid.setHint("Service UUID");serviceUuid.setText(BleLink.DEFAULT_SERVICE);advanced.addView(serviceUuid);
         characteristicUuid=new EditText(this);characteristicUuid.setSingleLine(true);characteristicUuid.setHint("Write characteristic UUID");characteristicUuid.setText(BleLink.DEFAULT_CHARACTERISTIC);advanced.addView(characteristicUuid);
-        text(root,"로컬 AI · MiniCPM-V 4.7 1B",19);
-        filesLabel=text(root,"",13);refreshFiles();
+        localPanel=new LinearLayout(this);localPanel.setOrientation(LinearLayout.VERTICAL);root.addView(localPanel);
+        text(localPanel,"로컬 AI · MiniCPM-V 4.7 1B",19);
+        filesLabel=text(localPanel,"",13);refreshFiles();
         if(!BuildConfig.BUNDLED_AI){
-            button(root,"1. 언어 모델 GGUF 선택",v->pick(PICK_MODEL,"*/*"));
-            button(root,"2. 비전 mmproj GGUF 선택",v->pick(PICK_VISION,"*/*"));
+            button(localPanel,"1. 언어 모델 GGUF 선택",v->pick(PICK_MODEL,"*/*"));
+            button(localPanel,"2. 비전 mmproj GGUF 선택",v->pick(PICK_VISION,"*/*"));
         }
-        load=button(root,BuildConfig.BUNDLED_AI?"내장 AI 준비":"3. 모델 불러오기",v->loadModel());
-        release=button(root,"모델 메모리 해제",v->runJob(()->{unload();ui(()->setStatus("모델 메모리를 해제했습니다."));}));
+        load=button(localPanel,BuildConfig.BUNDLED_AI?"내장 AI 준비":"3. 모델 불러오기",v->loadModel());
+        release=button(localPanel,"모델 메모리 해제",v->runJob(()->{unload();ui(()->setStatus("모델 메모리를 해제했습니다."));}));
         button(root,"사진 선택",v->pick(PICK_PHOTO,"image/*"));
         button(root,"카메라 촬영",v->takePhoto());
         button(root,"ESP32 사진 한 장 받기",v->{String address=ip.getText().toString().trim();stopLive();runJob(()->{byte[] jpeg=fetchCameraFrame(address);checkCancelled();setPicture(decodeImage(new ByteArrayInputStream(jpeg),1));});});
-        language=new Spinner(this);language.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"English · 설명 품질 확인","한국어 · 실험"}));root.addView(language);controls.add(language);
+        language=new Spinner(this);language.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"English","한국어"}));root.addView(language);controls.add(language);
         prompt=new EditText(this);prompt.setMinLines(3);prompt.setText("Describe the main visible objects and their positions. Mention visible obstacles. Do not guess distance, motion or collision risk. Use two short sentences.");root.addView(prompt);controls.add(prompt);
         language.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
             public void onNothingSelected(android.widget.AdapterView<?> p){}
-            public void onItemSelected(android.widget.AdapterView<?> p,View v,int position,long id){prompt.setText(position==0?"Describe the main visible objects and their positions. Mention visible obstacles. Do not guess distance, motion or collision risk. Use two short sentences in English.":"사진의 주요 물체, 화면상 위치, 눈에 보이는 장애물을 한국어 두 문장으로 설명하세요. 한자와 영어를 섞지 마세요. 거리·움직임·충돌은 추측하지 마세요.");}
+            public void onItemSelected(android.widget.AdapterView<?> p,View v,int position,long id){prompt.setText(position==0?DEFAULT_EN:DEFAULT_KO);}
         });
         yoloEnabled=new CheckBox(this);yoloEnabled.setText("YOLO 보조 감지 사용 (기기 내 실행)");yoloEnabled.setChecked(true);root.addView(yoloEnabled);controls.add(yoloEnabled);
         speak=new CheckBox(this);speak.setText("분석 후 기본 음성으로 읽기");speak.setChecked(true);root.addView(speak);
         button(root,"오프라인 한국어 음성 시험",v->say("길잡이 오프라인 음성 테스트입니다."));
         analyze=button(root,"기기에서 사진 분석",v->analyze());
-        stop=new Button(this);stop.setText("중지 요청");stop.setEnabled(false);root.addView(stop);stop.setOnClickListener(v->{cancelled.set(true);abortCameraRequest();if(tts!=null)tts.stop();setStatus("중지 요청됨 · 현재 네이티브 연산이 끝나면 중지합니다.");});
+        stop=new Button(this);stop.setText("중지 요청");stop.setEnabled(false);root.addView(stop);stop.setOnClickListener(v->{cancelled.set(true);abortCameraRequest();abortCloudRequest();if(tts!=null)tts.stop();setStatus("중지 요청됨 · Gemini 연결은 닫고, 로컬 연산은 현재 처리 후 중지합니다.");});
         status=text(root,BuildConfig.BUNDLED_AI?"AI 모델이 앱에 포함돼 있습니다. 사진 분석을 누르면 자동으로 준비합니다.":"경량 빌드 · 장면 설명용 모델을 따로 선택해야 합니다.",14);result=text(root,"",18);result.setTextIsSelectable(true);
-        text(root,"YOLO·장면 설명·기본 음성은 기기에서 실행됩니다. 새 물체 알림은 거리나 충돌 위험을 측정하지 않습니다. 한국어 장면 설명은 실험적입니다.",12);
+        text(root,"YOLO·기본 음성은 기기에서 실행됩니다. Gemini를 선택해 분석하면 사진이 Google로 전송됩니다. 새 물체 알림은 거리나 충돌 위험을 측정하지 않습니다.",12);
         tts=new TextToSpeech(this,code->{if(code!=TextToSpeech.SUCCESS)ui(()->setStatus("기본 TTS 초기화 실패 · 화면 결과를 확인하세요."));});
+        language.setSelection(cloudSelected()?1:0);prompt.setText(cloudSelected()?DEFAULT_KO:DEFAULT_EN);
+        aiModes.setOnCheckedChangeListener((group,id)->{
+            boolean cloud=cloudSelected();settings.edit().putBoolean("cloud",cloud).apply();
+            String question=prompt.getText().toString();if(question.equals(DEFAULT_EN)||question.equals(DEFAULT_KO))language.setSelection(cloud?1:0);
+            result.setText("");if(tts!=null)tts.stop();setStatus(cloud?"Gemini 선택됨 · 사진과 API 키를 준비하고 분석을 누르세요.":"로컬 AI 선택됨 · 사진을 준비하고 분석을 누르세요.");
+            if(cloud)jobs.execute(()->{unload();ui(this::updateControls);});
+            updateControls();
+        });
+        if(cloudSelected())setStatus("Gemini 선택됨 · 사진과 API 키를 준비하고 분석을 누르세요.");
         updateControls();
     }
     private TextView text(LinearLayout parent,String value,int size){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setPadding(0,12,0,12);parent.addView(t);return t;}
     private Button button(LinearLayout parent,String title,View.OnClickListener action){Button b=new Button(this);b.setText(title);b.setOnClickListener(action);parent.addView(b);controls.add(b);return b;}
     private void ui(Runnable action){runOnUiThread(()->{if(!destroyed)action.run();});}
     private void setStatus(String value){status.setText(value);}
+    private boolean cloudSelected(){return aiModes!=null&&cloudMode!=null&&aiModes.getCheckedRadioButtonId()==cloudMode.getId();}
+    private String cloudModel(){return settings.getString("gemini_model",GeminiClient.DEFAULT_MODEL);}
+    private void refreshProvider(){
+        boolean cloud=cloudSelected();localPanel.setVisibility(cloud?View.GONE:View.VISIBLE);
+        String description=cloud?"Gemini · "+cloudModel()+"\n분석 버튼을 누르면 사진이 Google로 전송됩니다. 인터넷·개인 API 키가 필요하며 사용량 요금이 생길 수 있습니다.\n"+(apiKeys.hasKey()?"개인 API 키 저장됨":"Gemini API 키 · 모델 설정에서 키를 입력하세요."):"로컬 AI · 인터넷 없이 휴대폰에서 분석합니다. 사진을 외부로 전송하지 않습니다. 한국어 설명은 언어가 섞일 수 있습니다.";
+        if(!description.contentEquals(providerHelp.getText()))providerHelp.setText(description);
+        analyze.setText(cloud?"Gemini로 사진 분석":"기기에서 사진 분석");
+    }
+    private void cloudSettings(){
+        if(busy)return;
+        LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(32,8,32,8);
+        text(panel,apiKeys.hasKey()?"키가 저장돼 있습니다. 새 키를 입력하면 교체하고, 비워두면 기존 키를 유지합니다.":"본인의 Gemini API 키를 입력하세요. 키는 이 휴대폰의 앱 저장소에 암호화해 보관합니다.",14);
+        EditText keyInput=new EditText(this);keyInput.setHint("개인 Gemini API 키");keyInput.setSingleLine(true);keyInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);keyInput.setSaveEnabled(false);keyInput.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);panel.addView(keyInput);
+        EditText modelInput=new EditText(this);modelInput.setSingleLine(true);modelInput.setHint("Gemini 모델 이름");modelInput.setText(cloudModel());panel.addView(modelInput);
+        text(panel,"기본 모델: "+GeminiClient.DEFAULT_MODEL+". API 키를 채팅으로 보내지 말고 이 입력칸에 입력하세요. Gemini 분석에는 인터넷과 사용 가능한 API 할당량이 필요합니다.",13);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Gemini 설정").setView(panel).setPositiveButton("저장",null).setNegativeButton("취소",null)
+            .setNeutralButton("저장된 키 삭제",(d,w)->runJob(()->{apiKeys.clear();ui(()->{setStatus("저장된 Gemini API 키를 삭제했습니다.");updateControls();});})).create();
+        dialog.setOnShowListener(d->{
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setEnabled(apiKeys.hasKey());
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+                String key=keyInput.getText().toString().trim(),model=modelInput.getText().toString().trim();
+                if(!GeminiClient.validModel(model)){modelInput.setError("gemini-로 시작하는 모델 이름을 입력하세요.");return;}
+                if(!key.isEmpty()&&!GeminiClient.validKey(key)){keyInput.setError("공백 없이 API 키 문자열만 입력하세요.");return;}
+                if(key.isEmpty()&&!apiKeys.hasKey()){keyInput.setError("개인 Gemini API 키를 입력하세요.");return;}
+                keyInput.setText("");dialog.dismiss();
+                runJob(()->{if(!key.isEmpty())apiKeys.save(key);settings.edit().putString("gemini_model",model).apply();ui(()->{setStatus("Gemini 설정 저장 완료. Gemini를 선택하고 사진 분석을 누르세요.");updateControls();});});
+            });
+        });
+        dialog.show();
+    }
     private void refreshFiles(){
         if(BuildConfig.BUNDLED_AI){filesLabel.setText(bundledError!=null?"내장 AI 패키지 오류: "+bundledError:"AI 모델 내장 · 첫 사용 준비 후 인터넷 없이 분석합니다.");return;}
         filesLabel.setText("언어 모델: "+(modelFile.exists()?modelFile.length()/1048576+"MB":"미선택")+" / 비전: "+(visionFile.exists()?visionFile.length()/1048576+"MB":"미선택"));
@@ -150,10 +211,11 @@ public final class MainActivity extends Activity {
         for(View v:controls)v.setEnabled(!busy);
         boolean canPrepare=bundledModels!=null||(!BuildConfig.BUNDLED_AI&&modelFile.exists()&&visionFile.exists());
         load.setEnabled(!busy&&!loaded&&canPrepare);
-        release.setEnabled(!busy&&loaded);analyze.setEnabled(!busy&&(loaded||bundledModels!=null)&&imageBytes!=null);stop.setEnabled(busy);
+        release.setEnabled(!busy&&loaded);analyze.setEnabled(!busy&&(cloudSelected()||loaded||bundledModels!=null)&&imageBytes!=null);stop.setEnabled(busy);
         liveStart.setEnabled(!busy&&live==null);liveStop.setEnabled(live!=null);ip.setEnabled(!busy&&live==null);
         bleScan.setEnabled(true);bleConnect.setEnabled(true);bleDisconnect.setEnabled(true);bleTest.setEnabled(ble.isReady());
         if(busy||live!=null)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        refreshProvider();
     }
     private byte[] fetchCameraFrame(String address) throws IOException {return fetchCameraFrame(address,false);}
     private byte[] fetchCameraFrame(String address,boolean requireStream) throws IOException {
@@ -168,6 +230,7 @@ public final class MainActivity extends Activity {
         }finally{cameraRequest=null;}
     }
     private void abortCameraRequest(){LocalCamera.Request pending=cameraRequest;if(pending!=null)new Thread(pending::close,"camera-request-close").start();}
+    private void abortCloudRequest(){GeminiClient.Request pending=cloudRequest;if(pending!=null)new Thread(pending::close,"gemini-request-close").start();}
     private void diagnoseCamera(){
         if(busy)return;String address=ip.getText().toString().trim();stopLive();
         runJob(()->{
@@ -296,16 +359,19 @@ public final class MainActivity extends Activity {
     private void require(int code,String action){if(code!=0)throw new IllegalStateException(action+" 실패 ("+code+"). 파일 조합과 엔진 호환성을 확인하세요.");}
     private void unload(){if(loaded&&engine!=null){engine.unload();loaded=false;}if(yolo!=null){try{yolo.close();}catch(Exception ignored){}yolo=null;}}
     private void analyze(){
-        if(busy||(!loaded&&bundledModels==null)||imageBitmap==null||imageBytes==null)return;
+        boolean cloud=cloudSelected();
+        if(busy||(!cloud&&!loaded&&bundledModels==null)||imageBitmap==null||imageBytes==null)return;
+        if(cloud&&!apiKeys.hasKey()){cloudSettings();return;}
         String question=prompt.getText().toString().trim();if(question.isEmpty()){setStatus("질문을 입력하세요.");return;}
+        String selectedModel=cloudModel();
         boolean read=speak.isChecked(),useYolo=yoloEnabled.isChecked(),cached=imageFromLive;
         final Bitmap snapshot=imageBitmap.copy(Bitmap.Config.ARGB_8888,false);
         if(snapshot==null){setStatus("분석용 사진을 준비하지 못했습니다.");return;}
         List<YoloDetector.Box> observations=new ArrayList<>(displayedBoxes);int revision=imageRevision;
         runJob(()->{try{
-            prepareModel();checkCancelled();
+            checkCancelled();if(cloud)unload();else prepareModel();checkCancelled();
             ByteArrayOutputStream encoded=new ByteArrayOutputStream();if(!snapshot.compress(Bitmap.CompressFormat.JPEG,90,encoded))throw new IOException("분석용 사진 변환 실패");byte[] jpeg=encoded.toByteArray();
-            long start=SystemClock.elapsedRealtime();ui(()->{result.setText("");setStatus("사진 분석 중 · CPU 실행");});
+            long start=SystemClock.elapsedRealtime();ui(()->{result.setText("");setStatus(cloud?"Gemini 분석 준비 중...":"사진 분석 중 · CPU 실행");});
             String yoloResult="";
             if(useYolo){
                 checkCancelled();List<YoloDetector.Box> boxes;
@@ -316,16 +382,28 @@ public final class MainActivity extends Activity {
                 ui(()->{if(!cancelled.get()&&revision==imageRevision){displayedBoxes=detectedBoxes;preview.update(imageBitmap,detectedBoxes);}});
                 String detected=yoloResult;ui(()->{if(!cancelled.get())setStatus("YOLO: "+detected+"\n장면 분석 중...");});
             }
-            engine.fullReset();checkCancelled();
-            require(engine.processSystemPrompt("Describe only visible evidence. Do not invent objects, motion, distance, or safety guarantees. If uncertain, say so."),"시스템 질문 처리");checkCancelled();
-            require(engine.prefillImage(jpeg,jpeg.length),"이미지 처리");checkCancelled();
             String fullQuestion=question+(useYolo?"\nYOLO auxiliary observations (may be wrong, boxes are normalized image coordinates): "+yoloResult:"");
-            require(engine.processUserPrompt(fullQuestion,192),"질문 처리");
-            StringBuilder answer=new StringBuilder();
-            for(int i=0;i<384;i++){checkCancelled();String token=engine.generateNextToken();if(token==null)break;answer.append(token);String partial=answer.toString();ui(()->{if(!cancelled.get())result.setText(partial);});}
-            checkCancelled();String value=answer.toString().replaceAll("(?s)<think>.*?</think>","").trim();if(value.isEmpty())throw new IOException("빈 답변입니다. 질문 또는 모델 파일을 확인하세요.");
-            long elapsed=SystemClock.elapsedRealtime()-start;ui(()->{if(cancelled.get())return;result.setText(value);setStatus(String.format(Locale.ROOT,"분석 완료 · %.1f초 · 로컬 실행",elapsed/1000.0));if(read)say(value);});
+            String value=cloud?cloudAnswer(jpeg,fullQuestion,selectedModel):localAnswer(jpeg,fullQuestion);checkCancelled();
+            long elapsed=SystemClock.elapsedRealtime()-start;ui(()->{if(cancelled.get())return;result.setText(value);setStatus(String.format(Locale.ROOT,"분석 완료 · %.1f초 · %s",elapsed/1000.0,cloud?"Gemini · "+selectedModel:"로컬 실행"));if(read)say(value);});
         }finally{snapshot.recycle();}});
+    }
+    private String localAnswer(byte[] jpeg,String question) throws Exception {
+        engine.fullReset();checkCancelled();
+        require(engine.processSystemPrompt("Describe only visible evidence. Do not invent objects, motion, distance, or safety guarantees. If uncertain, say so."),"시스템 질문 처리");checkCancelled();
+        require(engine.prefillImage(jpeg,jpeg.length),"이미지 처리");checkCancelled();
+        require(engine.processUserPrompt(question,192),"질문 처리");
+        StringBuilder answer=new StringBuilder();
+        for(int i=0;i<384;i++){checkCancelled();String token=engine.generateNextToken();if(token==null)break;answer.append(token);String partial=answer.toString();ui(()->{if(!cancelled.get())result.setText(partial);});}
+        checkCancelled();String value=answer.toString().replaceAll("(?s)<think>.*?</think>","").trim();if(value.isEmpty())throw new IOException("빈 답변입니다. 질문 또는 모델 파일을 확인하세요.");return value;
+    }
+    private String cloudAnswer(byte[] jpeg,String question,String model) throws Exception {
+        String key=apiKeys.read();checkCancelled();ui(()->setStatus("Gemini용 인터넷 연결 확인 중..."));
+        try(CloudNetwork.Lease internet=CloudNetwork.connect(this,()->cancelled.get()||destroyed)){
+            checkCancelled();ui(()->setStatus("Gemini 사진 분석 중 · "+internet.description));
+            try(GeminiClient.Request pending=new GeminiClient.Request(model,key,jpeg,question,internet.connector,()->cancelled.get()||destroyed)){
+                cloudRequest=pending;checkCancelled();return pending.execute();
+            }finally{cloudRequest=null;}
+        }
     }
     private void say(String value){
         if(tts==null)return;Locale locale=value.matches("(?s).*[가-힣].*")?Locale.KOREAN:Locale.ENGLISH;
@@ -351,10 +429,10 @@ public final class MainActivity extends Activity {
         checkCancelled();ByteArrayOutputStream bytes=new ByteArrayOutputStream();if(!bitmap.compress(Bitmap.CompressFormat.JPEG,90,bytes))throw new IOException("사진 변환 실패");byte[] jpeg=bytes.toByteArray();
         runOnUiThread(()->{if(destroyed||cancelled.get()){bitmap.recycle();return;}Bitmap old=imageBitmap;imageBitmap=bitmap;imageBytes=jpeg;imageFromLive=false;imageRevision++;displayedBoxes=Collections.emptyList();preview.update(bitmap,displayedBoxes);if(old!=null&&old!=bitmap)old.recycle();setStatus("사진 준비 완료 · "+bitmap.getWidth()+"×"+bitmap.getHeight());});
     }
-    @Override protected void onStop(){cancelled.set(true);abortCameraRequest();stopLive();if(ble!=null)ble.close();if(tts!=null)tts.stop();super.onStop();}
+    @Override protected void onStop(){cancelled.set(true);abortCameraRequest();abortCloudRequest();stopLive();if(ble!=null)ble.close();if(tts!=null)tts.stop();super.onStop();}
     @Override protected void onDestroy(){
         destroyed=true;cancelled.set(true);if(tts!=null){tts.stop();tts.shutdown();}
-        abortCameraRequest();stopLive();if(ble!=null)ble.close();
+        abortCameraRequest();abortCloudRequest();stopLive();if(ble!=null)ble.close();
         jobs.execute(()->{unload();if(initialized&&engine!=null)engine.shutdown();});jobs.shutdown();super.onDestroy();
     }
 }

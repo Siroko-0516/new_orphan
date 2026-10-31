@@ -45,14 +45,24 @@ jobs:
         run: ./gradlew --no-daemon -PbundledModelDir=../model-packs/minicpm-1b :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
       - name: Prepare downloads
         run: |
-          mkdir -p release-apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk release-apk/giljabi-0.3.0-full-debug.apk
-          cd release-apk
-          sha256sum giljabi-0.3.0-full-debug.apk > giljabi-0.3.0-full-debug.apk.sha256
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, shutil
+          metadata=json.loads(Path('android/app/build/outputs/apk/debug/output-metadata.json').read_text())
+          version=metadata['elements'][0]['versionName']
+          if not version.endswith('-full'):
+              raise SystemExit('Refusing to publish a lite build as the bundled app')
+          folder=Path('release-apk');folder.mkdir(exist_ok=True)
+          name='giljabi-'+version+'-debug.apk';target=folder/name
+          shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk',target)
+          with target.open('rb') as stream:
+              sha=hashlib.file_digest(stream,'sha256').hexdigest()
+          (folder/(name+'.sha256')).write_text(sha+'  '+name+'\n')
+          PY
       - uses: actions/upload-artifact@v4
         if: github.ref_type != 'tag'
         with:
-          name: giljabi-0.3.0-full-debug
+          name: giljabi-full-debug
           path: release-apk/*
           compression-level: 0
           retention-days: 1
@@ -61,4 +71,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 0.3.0 · 로컬 AI 모델 내장 테스트' --notes-file android/FULL_RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · 로컬 AI / Gemini 선택' --notes-file android/FULL_RELEASE_NOTES.md
