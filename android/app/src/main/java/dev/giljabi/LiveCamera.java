@@ -16,12 +16,13 @@ final class LiveCamera implements AutoCloseable {
     interface Decoder {Bitmap decode(byte[] jpeg) throws Exception;}
     static final class Frame {
         final byte[] jpeg;final Bitmap bitmap;final List<YoloDetector.Box> boxes;
-        final double receiveFps;final long detectionMs;
-        Frame(byte[] jpeg,Bitmap bitmap,List<YoloDetector.Box> boxes,double receiveFps,long detectionMs){this.jpeg=jpeg;this.bitmap=bitmap;this.boxes=boxes;this.receiveFps=receiveFps;this.detectionMs=detectionMs;}
+        final double receiveFps;final long detectionMs,receivedAt;
+        Frame(byte[] jpeg,Bitmap bitmap,List<YoloDetector.Box> boxes,double receiveFps,long detectionMs,long receivedAt){this.jpeg=jpeg;this.bitmap=bitmap;this.boxes=boxes;this.receiveFps=receiveFps;this.detectionMs=detectionMs;this.receivedAt=receivedAt;}
     }
     private final ExecutorService reader=Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService detector=Executors.newSingleThreadScheduledExecutor();
-    private final AtomicReference<byte[]> newest=new AtomicReference<>();
+    private static final class Pending {final byte[] jpeg;final long receivedAt;Pending(byte[] jpeg){this.jpeg=jpeg;receivedAt=SystemClock.elapsedRealtime();}}
+    private final AtomicReference<Pending> newest=new AtomicReference<>();
     private final AtomicBoolean running=new AtomicBoolean(true),scheduled=new AtomicBoolean();
     private final AtomicLong received=new AtomicLong();
     private final Context context;private final Decoder decode;private final Consumer<Frame> frame;private final Consumer<String> error;
@@ -37,7 +38,7 @@ final class LiveCamera implements AutoCloseable {
                 if(!opened.multipart)throw new IOException("실시간 감지는 /capture가 아닌 :81/stream 주소를 사용하세요.");
                 while(running.get()){
                     byte[] jpeg=opened.next();if(!running.get())break;
-                    newest.set(jpeg);received.incrementAndGet();schedule(0);
+                    newest.set(new Pending(jpeg));received.incrementAndGet();schedule(0);
                 }
                 }
             }catch(Exception e){fail(e);}finally{request=null;}
@@ -50,12 +51,12 @@ final class LiveCamera implements AutoCloseable {
     private void detect(){
         Bitmap image=null;
         try{
-            if(!running.get())return;byte[] jpeg=newest.getAndSet(null);if(jpeg==null)return;
+            if(!running.get())return;Pending pending=newest.getAndSet(null);if(pending==null)return;byte[] jpeg=pending.jpeg;
             image=decode.decode(jpeg);
             if(!firstPreview&&running.get()){
                 firstPreview=true;
                 Bitmap preview=image.copy(Bitmap.Config.ARGB_8888,false);
-                if(preview!=null)frame.accept(new Frame(jpeg,preview,Collections.emptyList(),received.get()*1000.0/Math.max(1,SystemClock.elapsedRealtime()-started),-1));
+                if(preview!=null)frame.accept(new Frame(jpeg,preview,Collections.emptyList(),received.get()*1000.0/Math.max(1,SystemClock.elapsedRealtime()-started),-1,pending.receivedAt));
             }
             if(yolo==null)yolo=new YoloDetector(context);
             if(!running.get())return;
@@ -64,7 +65,7 @@ final class LiveCamera implements AutoCloseable {
             if(running.get()){
                 ByteArrayOutputStream encoded=new ByteArrayOutputStream();
                 if(!image.compress(Bitmap.CompressFormat.JPEG,90,encoded))throw new IOException("사진 변환 실패");
-                frame.accept(new Frame(encoded.toByteArray(),image,boxes,received.get()*1000.0/Math.max(1,now-started),now-start));image=null;
+                frame.accept(new Frame(encoded.toByteArray(),image,boxes,received.get()*1000.0/Math.max(1,now-started),now-start,pending.receivedAt));image=null;
             }
         }catch(Exception e){fail(e);}finally{
             if(image!=null)image.recycle();scheduled.set(false);

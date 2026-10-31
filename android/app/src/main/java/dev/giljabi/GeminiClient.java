@@ -13,6 +13,10 @@ final class GeminiClient {
     static final String DEFAULT_MODEL="gemini-3.1-flash-lite";
     static final int MAX_IMAGE=2*1024*1024,MAX_RESPONSE=1024*1024;
     interface Connector {HttpURLConnection open(URL url) throws IOException;}
+    static final class ApiException extends IOException {
+        final int status;
+        ApiException(int status){super(httpError(status));this.status=status;}
+    }
     static boolean validModel(String model){return model!=null&&model.matches("gemini-[A-Za-z0-9._-]{1,100}");}
     static boolean validKey(String key){return key!=null&&key.matches("[A-Za-z0-9_-]{10,256}");}
     static byte[] payload(byte[] jpeg,String question) throws IOException {
@@ -73,7 +77,7 @@ final class GeminiClient {
                     for(int at=0;at<body.length;at+=16384){check();output.write(body,at,Math.min(16384,body.length-at));}
                 }
                 check();int code=connection.getResponseCode();check();
-                if(code!=200)throw new IOException(httpError(code));
+                if(code!=200)throw new ApiException(code);
                 input=connection.getInputStream();check();
                 ByteArrayOutputStream result=new ByteArrayOutputStream();byte[] block=new byte[8192];int n;
                 while((n=input.read(block))!=-1){check();if(result.size()+n>MAX_RESPONSE)throw new IOException("Gemini 응답이 너무 큽니다.");result.write(block,0,n);}

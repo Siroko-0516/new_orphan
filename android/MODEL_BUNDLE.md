@@ -1,6 +1,6 @@
 # 로컬 AI 모델을 APK에 포함하기
 
-0.3.0부터 모델 내장 빌드와 경량 빌드를 구분합니다. 최신 **0.4.0-full**은 같은 Q4_K_M 언어 모델·비전 mmproj를 포함하며 [로컬 AI / Gemini 선택](AI_MODES.md)을 제공합니다. 다운로드 경로는 [배포 안내](../downloads/README.md)를 확인하세요. `-PbundledModelDir` 없이 빌드하면 **lite**이며 MiniCPM 가중치를 포함하지 않습니다. 이 경량 APK를 모델 내장 완료본으로 배포하면 안 됩니다.
+0.3.0부터 모델 내장 빌드와 경량 빌드를 구분합니다. 최신 **0.5.0-full**은 같은 Q4_K_M 언어 모델·비전 mmproj를 포함하며 [로컬 AI / Gemini 선택](AI_MODES.md)을 제공합니다. 다운로드 경로는 [배포 안내](../downloads/README.md)를 확인하세요. `-PbundledModelDir` 없이 빌드하면 **lite**이며 MiniCPM 가중치를 포함하지 않습니다. 이 경량 APK를 모델 내장 완료본으로 배포하면 안 됩니다.
 
 내장 빌드에는 MiniCPM-V 4.7 1B의 **언어 GGUF와 그 모델에 맞는 비전 mmproj GGUF 둘 다**, 모델 배포자의 가중치 라이선스가 필요합니다. JNI 엔진의 MIT 라이선스는 가중치 라이선스를 대신하지 않습니다. 언어 파일만 포함하면 이미지 분석이 준비되지 않습니다. 원본 게시자: <https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf>.
 

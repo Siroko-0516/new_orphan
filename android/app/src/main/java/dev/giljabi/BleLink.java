@@ -10,7 +10,7 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /** HM-10 UART writes. Public methods and application callbacks run on the main thread. */
-@SuppressLint("MissingPermission") // Activity checks runtime permission before all BLE actions.
+@SuppressLint("MissingPermission") // Activity and foreground service check runtime permission before BLE actions.
 final class BleLink implements AutoCloseable {
     static final String DEFAULT_SERVICE="0000ffe0-0000-1000-8000-00805f9b34fb";
     static final String DEFAULT_CHARACTERISTIC="0000ffe1-0000-1000-8000-00805f9b34fb";
@@ -39,6 +39,7 @@ final class BleLink implements AutoCloseable {
         writeTimeout=()->{disconnect();status.accept("BLE 쓰기 응답 시간 초과 · 재전송하지 않았습니다.");};
     }
     boolean isReady(){return current!=null&&writer!=null;}
+    boolean isConnecting(){return current!=null&&writer==null;}
     BluetoothAdapter adapter(){BluetoothManager manager=context.getSystemService(BluetoothManager.class);return manager==null?null:manager.getAdapter();}
     void scan(){
         disconnect();devices.clear();found.accept(new ArrayList<>());
