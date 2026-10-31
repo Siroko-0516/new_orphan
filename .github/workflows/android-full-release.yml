@@ -1,0 +1,54 @@
+name: Android full offline APK
+on:
+  push:
+    tags:
+      - 'android-v*-full'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Reuse the test app signing key across full CI builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: giljabi-full-debug-signing-v1
+      - name: Install Android toolchain
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
+      - name: Prepare verified native engine
+        run: python3 android/scripts/prepare_engine.py
+      - name: Prepare pinned model and vision assets
+        run: python3 android/scripts/prepare_bundled_models.py --cache "$RUNNER_TEMP/model-cache" --output android/model-packs/minicpm-1b
+      - name: Build and verify full APK
+        working-directory: android
+        run: ./gradlew --no-daemon -PbundledModelDir=../model-packs/minicpm-1b :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+      - name: Prepare downloads
+        run: |
+          mkdir -p release-apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-apk/giljabi-0.3.0-full-debug.apk
+          cd release-apk
+          sha256sum giljabi-0.3.0-full-debug.apk > giljabi-0.3.0-full-debug.apk.sha256
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type != 'tag'
+        with:
+          name: giljabi-0.3.0-full-debug
+          path: release-apk/*
+          compression-level: 0
+          retention-days: 1
+      - name: Publish tagged test release
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 0.3.0 · 로컬 AI 모델 내장 테스트' --notes-file android/FULL_RELEASE_NOTES.md
