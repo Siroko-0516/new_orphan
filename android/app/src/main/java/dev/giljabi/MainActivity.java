@@ -280,7 +280,7 @@ public final class MainActivity extends Activity {
         if(BuildConfig.BUNDLED_AI){
             if(bundledModels==null)throw new IOException("내장 AI 패키지 오류: "+bundledError);
             ui(()->setStatus("앱에 포함된 AI 준비 중 · 첫 사용 시 시간이 걸립니다."));
-            bundledModels.install(path->getAssets().open(path),new File(getFilesDir(),"bundled-ai"),new StatFs(getFilesDir().getPath()).getAvailableBytes(),
+            bundledModels.install(path->getAssets().open(path),new File(getFilesDir(),"bundled-ai"),()->new StatFs(getFilesDir().getPath()).getAvailableBytes(),
                 (done,total)->ui(()->setStatus("내장 AI 준비 중 · "+done/1048576+" / "+total/1048576+"MB")),this::checkCancelled);
             checkCancelled();
         }

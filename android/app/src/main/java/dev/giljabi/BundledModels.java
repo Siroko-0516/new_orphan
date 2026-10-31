@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.*;
 import java.util.*;
+import java.util.function.LongSupplier;
 
 /** Installs the two APK assets as one verified pair, without network access. */
 final class BundledModels {
@@ -43,12 +44,13 @@ final class BundledModels {
         return new File(dir,"model.gguf").length()==modelBytes&&new File(dir,"mmproj.gguf").length()==visionBytes
             &&marker.isFile()&&Arrays.equals(Files.readAllBytes(marker.toPath()),manifest);
     }
-    synchronized File install(Assets assets,File root,long available,Progress progress,Cancellation cancellation) throws IOException {
+    synchronized File install(Assets assets,File root,LongSupplier available,Progress progress,Cancellation cancellation) throws IOException {
         cancellation.check();if(ready(root))return directory(root);
-        if(available<modelBytes+visionBytes+64L*1024*1024)throw new IOException("내장 AI 준비 공간이 부족합니다. 약 "+((modelBytes+visionBytes)/1048576+64)+"MB의 여유 공간이 필요합니다.");
         if(!root.isDirectory()&&!root.mkdirs())throw new IOException("AI 저장 폴더를 만들지 못했습니다.");
         File destination=directory(root),staging=new File(root,id+".part");
-        remove(staging);if(!staging.mkdir())throw new IOException("AI 임시 폴더를 만들지 못했습니다.");
+        remove(staging);
+        if(available.getAsLong()<modelBytes+visionBytes+64L*1024*1024)throw new IOException("내장 AI 준비 공간이 부족합니다. 약 "+((modelBytes+visionBytes)/1048576+64)+"MB의 여유 공간이 필요합니다.");
+        if(!staging.mkdir())throw new IOException("AI 임시 폴더를 만들지 못했습니다.");
         try {
             copy(assets,"model.gguf",new File(staging,"model.gguf"),modelBytes,modelHash,0,progress,cancellation);
             copy(assets,"mmproj.gguf",new File(staging,"mmproj.gguf"),visionBytes,visionHash,modelBytes,progress,cancellation);

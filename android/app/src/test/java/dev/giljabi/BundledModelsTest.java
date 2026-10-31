@@ -21,14 +21,14 @@ public class BundledModelsTest {
     }
     private BundledModels.Assets assets(byte[] vision){return path->new ByteArrayInputStream(path.endsWith("/model.gguf")?MODEL:vision);}
     private File install(BundledModels s,File root,BundledModels.Assets assets)throws IOException {
-        return s.install(assets,root,Long.MAX_VALUE,(n,total)->{},()->{});
+        return s.install(assets,root,()->Long.MAX_VALUE,(n,total)->{},()->{});
     }
     @Test public void installsVerifiedPairAndReusesItWithoutOpeningAssets()throws Exception {
         BundledModels s=spec();File root=temporary.newFolder();File dir=install(s,root,assets(VISION));
         assertArrayEquals(MODEL,Files.readAllBytes(new File(dir,"model.gguf").toPath()));
         assertArrayEquals(VISION,Files.readAllBytes(new File(dir,"mmproj.gguf").toPath()));
         assertTrue(s.ready(root));
-        assertEquals(dir,s.install(p->{throw new AssertionError("Already installed");},root,0,(n,t)->{},()->{}));
+        assertEquals(dir,s.install(p->{throw new AssertionError("Already installed");},root,()->0,(n,t)->{},()->{}));
     }
     @Test public void checksumFailurePublishesNeitherFile()throws Exception {
         BundledModels s=spec();File root=temporary.newFolder();byte[] wrong=VISION.clone();wrong[5]^=1;
@@ -42,12 +42,12 @@ public class BundledModelsTest {
     }
     @Test public void cancellationDuringSecondFileCleansStaging()throws Exception {
         BundledModels s=spec();File root=temporary.newFolder();boolean[] stop={false};
-        assertThrows(CancellationException.class,()->s.install(assets(VISION),root,Long.MAX_VALUE,(n,t)->stop[0]=true,()->{if(stop[0])throw new CancellationException();}));
+        assertThrows(CancellationException.class,()->s.install(assets(VISION),root,()->Long.MAX_VALUE,(n,t)->stop[0]=true,()->{if(stop[0])throw new CancellationException();}));
         assertFalse(s.ready(root));assertEquals(0,Objects.requireNonNull(root.list()).length);
     }
     @Test public void insufficientSpaceDoesNotOpenLargeAssets()throws Exception {
         BundledModels s=spec();File root=temporary.newFolder();
-        assertThrows(IOException.class,()->s.install(p->{throw new AssertionError("No space");},root,0,(n,t)->{},()->{}));
+        assertThrows(IOException.class,()->s.install(p->{throw new AssertionError("No space");},root,()->0,(n,t)->{},()->{}));
         assertEquals(0,Objects.requireNonNull(root.list()).length);
     }
     @Test public void failedUpdatePreservesPreviousVersion()throws Exception {
@@ -60,5 +60,11 @@ public class BundledModelsTest {
         BundledModels s=spec();File root=temporary.newFolder();File dir=install(s,root,assets(VISION));
         Files.write(new File(dir,"mmproj.gguf").toPath(),new byte[0]);assertFalse(s.ready(root));
         install(s,root,assets(VISION));assertTrue(s.ready(root));
+    }
+    @Test public void removesFilesLeftByProcessDeathBeforeCheckingFreeSpace()throws Exception {
+        BundledModels s=spec();File root=temporary.newFolder(),staging=new File(root,s.id+".part");assertTrue(staging.mkdir());
+        Files.write(new File(staging,"model.gguf").toPath(),MODEL);
+        s.install(assets(VISION),root,()->{assertFalse("Stale files must be removed before measuring free space",staging.exists());return Long.MAX_VALUE;},(n,t)->{},()->{});
+        assertTrue(s.ready(root));
     }
 }
