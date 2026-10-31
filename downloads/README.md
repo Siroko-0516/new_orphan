@@ -1,14 +1,29 @@
 # 길잡이 테스트 APK
 
+## 로컬 AI 모델 내장 · 0.3.0-full
+
+**[giljabi-0.3.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.3.0-r3-full/giljabi-0.3.0-full-debug.apk)** · [릴리스 안내와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.3.0-r3-full)
+
+Android 8 이상 ARM64용입니다. MiniCPM-V 4.7 1B Q4_K_M 언어 모델과 해당 비전 mmproj를 모두 포함하므로 **모델 파일을 따로 받거나 선택하지 않습니다.** 설치 파일은 약 **1.8GB**이고 첫 AI 준비 시 앱 내부에 약 1.8GB가 추가로 필요합니다. 다운로드·설치·준비를 위해 여유 저장 공간 **6GB 이상**을 권장합니다.
+
+1. 인터넷이 되는 연결에서 APK를 내려받고 휴대폰의 **내 파일 → 다운로드 → APK**로 설치합니다. 이전 테스트 앱과 서명 충돌로 설치가 안 되면 기존 앱을 삭제한 뒤 설치하세요. 삭제하면 기존 앱 내부 데이터·모델 복사본이 삭제됩니다. full 버전은 원본 모델을 다시 선택할 필요가 없습니다.
+2. 휴대폰을 ESP32-CAM Wi-Fi에 연결하고, 앱에서 `http://192.168.4.1:81/stream` → **ESP 영상 + YOLO 시작**을 누릅니다. 브라우저의 별도 카메라 스트림은 닫습니다.
+3. **기기에서 사진 분석**을 누르면 앱에 포함된 AI를 준비한 뒤 그때의 사진 한 장을 설명합니다. 첫 준비에 시간이 걸리며 이후에는 완료된 복사본을 재사용합니다. 분석을 자동 반복하지는 않습니다.
+4. 아두이노 연결은 **BLE 기기 검색 → HM-10 선택 → 연결 → TEST 신호**로 확인합니다. **새 물체 감지 시 아두이노 신호 전송**을 켜면 감지 확인 후 `OBSTACLE\n`을 전송합니다.
+
+모델 준비·추론은 기기 내에서 실행하며 서버 API 키가 필요하지 않습니다. 한국어 설명은 실험적이고, 오프라인 TTS는 휴대폰에 해당 음성이 설치되어 있어야 합니다. 실제 휴대폰의 속도·최대 RAM·카메라·BLE는 실기기 확인이 필요하며, 3~4GB RAM에서의 실행을 보장하지 않습니다. [기능·빌드 범위](../android/MODEL_BUNDLE.md) · [로컬 빌드 검증](../android/FULL_VALIDATION.md).
+
+APK가 100MB를 초과하므로 이 폴더의 Git 파일 대신 GitHub Releases에서 제공합니다. 해당 릴리스의 APK 옆 `.sha256`이 **배포 파일**의 해시이며, 개발 환경에서 따로 빌드한 APK의 해시와 다를 수 있습니다.
+
 ## ESP 원본 영상 속도 확인용 펌웨어
 
 크롬에서 ESP 영상 자체가 끊기는 경우에는 [CameraWebServerFast-v1.zip](CameraWebServerFast-v1.zip)을 전부 압축 해제하고 내부 `CameraWebServerFast/CameraWebServerFast.ino`를 Arduino IDE로 엽니다. 이는 **ESP32-CAM에 업로드하는 카메라 코드**이며 Android APK나 별도 아두이노 HM-10 수신 코드가 아닙니다.
 
 구형 AI Thinker ESP32-CAM용으로 매 부팅 QVGA 320×240 / JPEG quality 20, PSRAM이 있으면 버퍼 2개와 최신 프레임 획득, 자체 AP 모드를 사용합니다. 스트리밍 중 3초마다 시리얼 모니터에 `STREAM` FPS·프레임 크기·프레임 대기·처리/HTTP 쓰기 시간을 출력합니다. 실제 FPS 향상을 보장하지 않습니다. [설치·측정·출처와 검증 범위](../arduino/CameraWebServerFast/README.md)를 확인하세요. 이 환경에서 ESP32 보드 컴파일과 실물 성능 측정은 실행하지 않았고, ZIP 구성·무결성·동봉한 공식 파일의 SHA-256 일치를 확인했습니다.
 
-## Android 앱
+## 이전 Android 앱 · 0.2.0
 
-최신 파일은 **[giljabi-0.2.0-debug.apk](giljabi-0.2.0-debug.apk)**이며 Android 8 이상 ARM64 기기용 디버그 빌드입니다. YOLO 가중치는 포함되지만 MiniCPM 언어 GGUF·비전 mmproj 파일은 포함되지 않습니다.
+이전 파일은 **[giljabi-0.2.0-debug.apk](giljabi-0.2.0-debug.apk)**이며 Android 8 이상 ARM64 기기용 디버그 빌드입니다. YOLO 가중치는 포함되지만 MiniCPM 언어 GGUF·비전 mmproj 파일은 포함되지 않습니다. 모델 내장 APK는 위의 0.3.0-full을 사용하세요.
 
 휴대폰에서 APK를 내려받고 **내 파일 → 다운로드 → APK**로 설치하세요. PC의 VS Code에서 여는 파일이 아닙니다. 학교 관리 기기는 담당자에게 설치 허용을 받아야 합니다.
 
