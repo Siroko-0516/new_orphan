@@ -1,0 +1,64 @@
+{
+  "version": "0.7.0-full",
+  "version_code": 12,
+  "source": "38976f9",
+  "ci_run": 41310974806,
+  "camera_job": 124861076770,
+  "full_build_job": 124862252244,
+  "bytes": 1806539240,
+  "sha256": "352c0659f7ca45534d7a0bf579db6a819188e114266cd30b5c1113bd5066ad6e",
+  "apk_v2_verified": true,
+  "certificate_sha256": "0c0aa9209d9b38e9a1b64c9f845c73e332f4915610795f82d6e6c5d9740cba07",
+  "zipalign_16k": true,
+  "models": {
+    "model.gguf": {
+      "bytes": 672003680,
+      "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d"
+    },
+    "mmproj.gguf": {
+      "bytes": 1110117984,
+      "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900"
+    }
+  },
+  "elf_load_alignments": {
+    "lib/arm64-v8a/libc++_shared.so": 16384,
+    "lib/arm64-v8a/libggml-base.so": 16384,
+    "lib/arm64-v8a/libggml-cpu-android_armv8.0_1.so": 16384,
+    "lib/arm64-v8a/libggml-cpu-android_armv8.2_1.so": 16384,
+    "lib/arm64-v8a/libggml-cpu-android_armv8.2_2.so": 16384,
+    "lib/arm64-v8a/libggml-cpu-android_armv8.6_1.so": 16384,
+    "lib/arm64-v8a/libggml.so": 16384,
+    "lib/arm64-v8a/libgiljabi_native.so": 16384,
+    "lib/arm64-v8a/libllama-common.so": 16384,
+    "lib/arm64-v8a/libllama.so": 16384,
+    "lib/arm64-v8a/libmtmd.so": 16384,
+    "lib/arm64-v8a/libonnxruntime.so": 16384,
+    "lib/arm64-v8a/libonnxruntime4j_jni.so": 16384
+  },
+  "checks": {
+    "tests": 123,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint_errors": 0
+  },
+  "native_checks": {
+    "template_failure_reproduced": true,
+    "complete_turn_rendering_passed": true,
+    "jni_exception_guard_passed": true
+  },
+  "camera_android15_smoke_passed": true,
+  "elevenlabs_live_voice_requests": {
+    "female_http": 200,
+    "male_http": 200,
+    "mp3_decoded": true
+  },
+  "physical_phone_latency_measured": false,
+  "full_vlm_1_to_2_seconds_verified": false,
+  "packaged_acceleration_instruction_counts": {
+    "android_armv8.2_1": 1271,
+    "android_armv8.2_2": 8,
+    "android_armv8.6_1": 404
+  },
+  "native_release_o3_config_verified": true
+}

@@ -6,7 +6,7 @@
 
 Gemini 음성은 기존 `eleven_multilingual_v2`, 제공한 여자(기본)·남자 Voice ID로 고정합니다. 앱의 **ElevenLabs API 키 · 고정 음성 설정**에 개인 키를 입력하세요. 키는 암호화해 기기에 저장하며 설명 문장이 ElevenLabs로 전송되고 사용량이 발생합니다. 로컬은 기존 오프라인 음성을 사용합니다. ESP·휴대폰 후면/전면·모델 내장·사진 분석·TTS·BLE·백그라운드 기능을 유지합니다.
 
-[사용법과 검증 범위](https://github.com/Siroko-0516/new_orphan/blob/main/android/QUICK_GUIDANCE.md). 태그마다 서명이 달라질 수 있어 기존 앱에서 설치 오류가 나면 삭제 후 설치해야 합니다. 삭제하면 개인 키·설정·준비된 모델 복사본이 삭제됩니다.
+[사용법과 검증 범위](https://github.com/Siroko-0516/new_orphan/blob/main/android/QUICK_GUIDANCE.md). **이번 공개 0.7.0 APK는 공개 0.6.1과 서명이 달라 기존 앱을 삭제한 후 설치해야 합니다.** 삭제하면 개인 키·설정·준비된 모델 복사본이 삭제됩니다.
 
 **0.6.1 · 휴대폰 후면·전면 카메라 추가**
 

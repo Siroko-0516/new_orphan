@@ -33,3 +33,23 @@ ElevenLabs에는 설명 텍스트만 전송합니다. 별도 인터넷·사용�
 ## 검증
 
 단위 검사는 변화 유지·노출 변화·흔들림·장애물 확인·이벤트 병합·분석 중 새 이벤트 유지·오래된 결과 배제·단색 영상과 ElevenLabs 요청/오류/취소/용량 제한을 검사합니다. 카메라와 화면 꺼짐 동작은 기존 Android 15 에뮬레이터 계측 검사를 다시 실행합니다. 실제 휴대폰의 최적화 후 속도·물체 정확도와 실제 계정의 ElevenLabs 인증·재생은 별도 확인이 필요합니다.
+
+## 공개 APK 검증 · 2026-11-01
+
+[0.7.0-full APK 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.7.0-full/giljabi-0.7.0-full-debug.apk) · [릴리스](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.7.0-full) · [검증 데이터](QUICK_GUIDANCE_VALIDATION.json).
+
+[CI 41310974806](https://github.com/Siroko-0516/new_orphan/actions/runs/41310974806), 소스 `38976f9`, versionCode 12. Android 15 에뮬레이터 카메라 계측 검사 2개, 단위 검사 **123개(실패·오류·건너뜀 0)**, lint 오류 **0**, 실제 GGUF 대화 템플릿 회귀·JNI 예외 변환 검사 통과. 로컬 ARM64 네이티브 크로스 빌드도 성공했고, Gradle 네이티브 구성의 Release/`-O3`와 네 CPU 아키텍처 플래그를 확인했습니다.
+
+공개 APK를 직접 내려받아 확인했습니다.
+
+- 1,806,539,240 바이트, 약 1.8GB, Android 8 이상 ARM64.
+- SHA-256 `352c0659f7ca45534d7a0bf579db6a819188e114266cd30b5c1113bd5066ad6e` — 릴리스 체크섬과 일치.
+- v2 서명 유효. 인증서 SHA-256 `0c0aa9209d9b38e9a1b64c9f845c73e332f4915610795f82d6e6c5d9740cba07`.
+- 두 GGUF 파일의 크기·SHA-256·무압축 저장이 고정 명세와 일치. YOLO 원본도 일치.
+- 16KB ZIP 정렬과 모든 ARM64 ELF PT_LOAD 16KB 정렬 확인.
+- 네 CPU 백엔드와 런타임 기능 점수 함수, 실제 dot-product/FP16/i8mm 명령어를 APK에서 확인. 가속 경로의 동봉 확인이며 실물 휴대폰에서 어느 경로가 선택됐는지와 성능 측정을 대신하지 않습니다.
+- KleidiAI 라이선스·두 Voice ID·변화 안내/입력 검사/ElevenLabs 코드 포함. 키 문자열 형식의 상수 동봉 없음.
+
+제공한 두 Voice ID로 실제 ElevenLabs 요청을 각각 한 번 실행해 모두 HTTP 200, 44.1kHz MP3를 받았으며 오디오 디코딩을 확인했습니다. 앱에서의 실제 휴대폰 스피커 재생·네트워크 지연은 별도 확인이 필요합니다. 테스트 자격 증명은 소스·APK에 넣지 않았고 이 기록에 키 값을 남기지 않습니다.
+
+**공개 0.6.1과 서명이 달라 기존 앱 삭제 후 설치해야 합니다.** 삭제 시 개인 키·설정·모델 복사본이 삭제되므로 Gemini·ElevenLabs 키를 앱 설정에 다시 입력하고 내장 모델을 다시 준비해야 합니다. 새 APK의 실제 휴대폰 전체 VLM 속도와 모든 장애물의 정확도·탐지 지연은 확인하지 않았습니다. **1~2초 전체 AI 추론 달성은 미검증**입니다.

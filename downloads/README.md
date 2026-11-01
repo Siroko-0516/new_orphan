@@ -1,6 +1,20 @@
 # 길잡이 테스트 APK
 
-## 최신 · 휴대폰 후면·전면 카메라 추가 · 0.6.1-full
+## 최신 · 변화 안내 / 로컬 가속 / ElevenLabs · 0.7.0-full
+
+**[giljabi-0.7.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.7.0-full/giljabi-0.7.0-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.7.0-full)
+
+- 같은 장면은 반복 분석하지 않고, 시작 시 한 번과 확인된 큰 변화에 AI 설명을 요청합니다. 새 장애물은 YOLO가 여러 프레임에서 확인해 짧게 안내하며 긴 AI 분석을 기다리지 않습니다.
+- 단색·매우 어둡거나 밝은 영상의 AI 추론을 생략하고 확인이 어렵다고 표시합니다. 장면이 바뀐 뒤의 늦은 설명은 음성 안내에서 제외합니다.
+- ARM dot-product·FP16·i8mm·KleidiAI와 짧은 출력·보조 입력 축소·더미 예열 제거를 적용했습니다. **실제 휴대폰의 최적화 후 속도와 전체 로컬 AI 1~2초 완료는 아직 미검증**입니다.
+- Gemini AI 설명은 ElevenLabs의 기존 여자(기본)/남자 음성, 로컬 AI 설명과 빠른 YOLO 알림은 휴대폰 오프라인 음성입니다. **ElevenLabs API 키 · 고정 음성 설정**에 개인 키를 입력합니다.
+- ESP·휴대폰 후면/전면·로컬/Gemini 선택·사진·기본 TTS·BLE·백그라운드를 유지하며 모델 두 파일을 내장한 약 1.8GB ARM64 APK입니다.
+- **공개 0.6.1과 서명이 달라 기존 앱 삭제 후 설치해야 합니다.** 삭제하면 개인 키·설정·준비된 모델이 초기화됩니다. 내장 모델은 다시 준비하며 Gemini·ElevenLabs 키는 앱 설정에 입력합니다.
+- 단위 검사 123개, Android 15 카메라·백그라운드 검사, 네이티브 회귀 검사 통과. 실제 ElevenLabs 여자·남자 음성 생성·MP3 디코딩 확인. 공개 APK 모델 해시·서명·16KB 정렬과 가속 라이브러리 확인.
+
+[사용법·속도와 정확도 한계·검증](../android/QUICK_GUIDANCE.md) · [검증 데이터](../android/QUICK_GUIDANCE_VALIDATION.json).
+
+## 이전 · 휴대폰 후면·전면 카메라 추가 · 0.6.1-full
 
 **[giljabi-0.6.1-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.6.1-full/giljabi-0.6.1-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.6.1-full)
 
