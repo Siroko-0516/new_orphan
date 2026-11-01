@@ -5,6 +5,8 @@ import android.graphics.*;
 import ai.onnxruntime.*;
 import java.io.*;
 import java.nio.FloatBuffer;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.*;
 
 /** Same YOLO11n ONNX model and normalized box convention as the web app. CPU only. */
@@ -12,6 +14,20 @@ final class YoloDetector implements AutoCloseable {
     static final int SIZE=416;
     private final OrtEnvironment environment=OrtEnvironment.getEnvironment();
     private final OrtSession session;
+    private Bitmap input;
+    private Canvas canvas;
+    private final Paint resizePaint=new Paint(Paint.FILTER_BITMAP_FLAG);
+    private int[] pixels;
+    private float[] values;
+    private FloatBuffer buffer;
+    private OnnxTensor data;
+    private void prepareInput() throws OrtException {
+        if(input==null){input=Bitmap.createBitmap(SIZE,SIZE,Bitmap.Config.ARGB_8888);canvas=new Canvas(input);}
+        if(pixels==null)pixels=new int[SIZE*SIZE];
+        if(values==null)values=new float[3*SIZE*SIZE];
+        if(buffer==null)buffer=ByteBuffer.allocateDirect(3*SIZE*SIZE*Float.BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        if(data==null)data=OnnxTensor.createTensor(environment,buffer,new long[]{1,3,SIZE,SIZE});
+    }
     YoloDetector(Context context) throws Exception {
         byte[] model;
         try(InputStream in=context.getAssets().open("yolo11n.onnx");ByteArrayOutputStream out=new ByteArrayOutputStream()){
@@ -22,17 +38,17 @@ final class YoloDetector implements AutoCloseable {
             session=environment.createSession(model,options);
         }
     }
-    List<Box> detect(Bitmap image) throws Exception {
+    synchronized List<Box> detect(Bitmap image) throws Exception {
+        prepareInput();
         float scale=Math.min((float)SIZE/image.getWidth(),(float)SIZE/image.getHeight());
-        Bitmap input=Bitmap.createBitmap(SIZE,SIZE,Bitmap.Config.ARGB_8888);
-        Canvas canvas=new Canvas(input);canvas.drawColor(Color.rgb(114,114,114));
+        canvas.drawColor(Color.rgb(114,114,114));
         float dx=(SIZE-image.getWidth()*scale)/2,dy=(SIZE-image.getHeight()*scale)/2;
-        canvas.drawBitmap(image,null,new RectF(dx,dy,dx+image.getWidth()*scale,dy+image.getHeight()*scale),new Paint(Paint.FILTER_BITMAP_FLAG));
-        int[] pixels=new int[SIZE*SIZE];input.getPixels(pixels,0,SIZE,0,0,SIZE,SIZE);input.recycle();
-        float[] tensor=new float[3*SIZE*SIZE];int plane=SIZE*SIZE;
-        for(int i=0;i<plane;i++){int c=pixels[i];tensor[i]=((c>>16)&255)/255f;tensor[plane+i]=((c>>8)&255)/255f;tensor[2*plane+i]=(c&255)/255f;}
-        try(OnnxTensor data=OnnxTensor.createTensor(environment,FloatBuffer.wrap(tensor),new long[]{1,3,SIZE,SIZE});
-            OrtSession.Result result=session.run(Collections.singletonMap(session.getInputNames().iterator().next(),data))){
+        canvas.drawBitmap(image,null,new RectF(dx,dy,dx+image.getWidth()*scale,dy+image.getHeight()*scale),resizePaint);
+        input.getPixels(pixels,0,SIZE,0,0,SIZE,SIZE);
+        int plane=SIZE*SIZE;
+        for(int i=0;i<plane;i++){int c=pixels[i];values[i]=((c>>16)&255)/255f;values[plane+i]=((c>>8)&255)/255f;values[2*plane+i]=(c&255)/255f;}
+        buffer.clear();buffer.put(values);buffer.rewind();
+        try(OrtSession.Result result=session.run(Collections.singletonMap(session.getInputNames().iterator().next(),data))){
             float[][] output=((float[][][])result.get(0).getValue())[0];
             return decode(output,image.getWidth(),image.getHeight());
         }
@@ -66,6 +82,10 @@ final class YoloDetector implements AutoCloseable {
     static float clamp(float n){return Math.max(0,Math.min(1,n));}
     static float area(float[] a){return Math.max(0,a[2]-a[0])*Math.max(0,a[3]-a[1]);}
     static float iou(float[] a,float[] b){float intersection=area(new float[]{Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.min(a[2],b[2]),Math.min(a[3],b[3])});float union=area(a)+area(b)-intersection;return union>0?intersection/union:0;}
-    @Override public void close() throws OrtException {session.close();}
+    @Override public synchronized void close() throws OrtException {
+        try{if(data!=null){data.close();data=null;}}finally{
+            try{session.close();}finally{if(input!=null){input.recycle();input=null;}canvas=null;pixels=null;values=null;buffer=null;}
+        }
+    }
     static final String[] LABELS={"person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","dining table","toilet","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear","hair drier","toothbrush"};
 }

@@ -1,6 +1,8 @@
 # 길잡이 Android · ESP 실시간 YOLO + 로컬 VLM
 
-최신 **0.5.0-full**은 앱 상단에서 **로컬 AI / Gemini**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, Gemini는 개인 API 키를 앱에 설정해 사용합니다. [두 모드 사용 안내](AI_MODES.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+최신 **0.5.1-full**은 앱 상단에서 **로컬 AI / Gemini**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, Gemini는 개인 API 키를 앱에 설정해 사용합니다. [두 모드 사용 안내](AI_MODES.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+
+**0.5.1**은 화면에 표시한 이전 비트맵의 조기 해제를 제거하고 YOLO 입력 버퍼를 재사용합니다. 종료가 계속되면 **앱 오류 기록 보기 · 복사**로 기록을 확인하세요. [수정 내용과 검증 범위](STREAM_CRASH_FIX.md).
 
 앱은 **ESP32 MJPEG 수신 → 기기 내 YOLO 감지 박스**, **현재 장면 또는 선택한 사진 → 선택한 AI의 설명 → 오프라인 TTS**, **HM-10 BLE → 아두이노 TEST / 새 물체 신호**를 구현합니다. YOLO만 쓸 때는 VLM을 불러올 필요가 없습니다. 기존 웹 앱과 별도 프로젝트입니다.
 

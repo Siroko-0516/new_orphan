@@ -114,11 +114,12 @@ public final class MonitorService extends Service {
             camera=new LiveCamera(this,config.address,choice.connector,jpeg->PhotoCodec.decode(new ByteArrayInputStream(jpeg),1),frame->acceptFrame(generation,frame),
                 progress->main.post(()->{if(monitoring&&!stopping&&generation==cameraGeneration){status=progress;publish();}}),
                 error->main.post(()->cameraError(generation,error)));
-        }catch(Exception failure){cameraError(generation,message(failure));}
+        }catch(Exception failure){cameraError(generation,CameraFailure.from(failure));}
     }
-    private void cameraError(int generation,String error){
-        if(!monitoring||stopping||generation!=cameraGeneration)return;cameraGeneration++;LiveCamera old=camera;camera=null;if(old!=null)old.close();clearFrame();
-        synchronized(modeLock){gate.invalidateFrames();}closeRequest();status="ESP 연결 끊김 · 5초 후 재연결: "+error;publish();main.removeCallbacks(reconnect);main.postDelayed(reconnect,5000);
+    private void cameraError(int generation,CameraFailure error){
+        if(!monitoring||stopping||generation!=cameraGeneration)return;
+        if(!error.retryable){terminalError=error.message;stopMonitoring();return;}cameraGeneration++;LiveCamera old=camera;camera=null;if(old!=null)old.close();clearFrame();
+        synchronized(modeLock){gate.invalidateFrames();}closeRequest();status="ESP 연결 끊김 · 5초 후 재연결: "+error.message;publish();main.removeCallbacks(reconnect);main.postDelayed(reconnect,5000);
     }
     private void acceptFrame(int generation,LiveCamera.Frame frame){
         synchronized(frameLock){
@@ -134,7 +135,7 @@ public final class MonitorService extends Service {
             for(Observer observer:OBSERVERS){
                 ViewFrame view=null;
                 synchronized(frameLock){FramePacket current=latest;if(current!=null)try{Bitmap copy=current.bitmap.copy(Bitmap.Config.ARGB_8888,false);if(copy!=null)view=new ViewFrame(copy,current);}catch(OutOfMemoryError ignored){}}
-                if(view!=null)try{observer.frame(view);}catch(RuntimeException failure){view.bitmap.recycle();}
+                if(view!=null)try{observer.frame(view);}catch(RuntimeException failure){CrashDiagnostics.record("실시간 화면 갱신",failure);}
             }
         });
     }

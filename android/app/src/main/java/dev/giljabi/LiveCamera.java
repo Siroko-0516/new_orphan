@@ -25,11 +25,11 @@ final class LiveCamera implements AutoCloseable {
     private final AtomicReference<Pending> newest=new AtomicReference<>();
     private final AtomicBoolean running=new AtomicBoolean(true),scheduled=new AtomicBoolean();
     private final AtomicLong received=new AtomicLong();
-    private final Context context;private final Decoder decode;private final Consumer<Frame> frame;private final Consumer<String> error;
+    private final Context context;private final Decoder decode;private final Consumer<Frame> frame;private final Consumer<CameraFailure> error;
     private final long started=SystemClock.elapsedRealtime();
     private volatile LocalCamera.Request request;private YoloDetector yolo;
     private boolean firstPreview;
-    LiveCamera(Context context,String address,LocalCamera.Connector connector,Decoder decode,Consumer<Frame> frame,Consumer<String> progress,Consumer<String> error){
+    LiveCamera(Context context,String address,LocalCamera.Connector connector,Decoder decode,Consumer<Frame> frame,Consumer<String> progress,Consumer<CameraFailure> error){
         this.context=context.getApplicationContext();this.decode=decode;this.frame=frame;this.error=error;
         reader.execute(()->{
             try(LocalCamera.Request pending=LocalCamera.request(address,connector,progress)){
@@ -41,7 +41,7 @@ final class LiveCamera implements AutoCloseable {
                     newest.set(new Pending(jpeg));received.incrementAndGet();schedule(0);
                 }
                 }
-            }catch(Exception e){fail(e);}finally{request=null;}
+            }catch(Exception | OutOfMemoryError | LinkageError e){fail(e);}finally{request=null;}
         });
     }
     private void schedule(long delay){
@@ -52,13 +52,14 @@ final class LiveCamera implements AutoCloseable {
         Bitmap image=null;
         try{
             if(!running.get())return;Pending pending=newest.getAndSet(null);if(pending==null)return;byte[] jpeg=pending.jpeg;
-            image=decode.decode(jpeg);
+            CrashDiagnostics.stage("ESP JPEG 디코딩");image=decode.decode(jpeg);
             if(!firstPreview&&running.get()){
                 firstPreview=true;
                 Bitmap preview=image.copy(Bitmap.Config.ARGB_8888,false);
                 if(preview!=null)frame.accept(new Frame(jpeg,preview,Collections.emptyList(),received.get()*1000.0/Math.max(1,SystemClock.elapsedRealtime()-started),-1,pending.receivedAt));
             }
-            if(yolo==null)yolo=new YoloDetector(context);
+            if(yolo==null){CrashDiagnostics.checkpoint("YOLO 라이브러리/모델 준비");yolo=new YoloDetector(context);}
+            CrashDiagnostics.stage("ESP 프레임 YOLO 분석");
             if(!running.get())return;
             long start=SystemClock.elapsedRealtime();List<YoloDetector.Box> boxes=yolo.detect(image);
             long now=SystemClock.elapsedRealtime();
@@ -67,12 +68,15 @@ final class LiveCamera implements AutoCloseable {
                 if(!image.compress(Bitmap.CompressFormat.JPEG,90,encoded))throw new IOException("사진 변환 실패");
                 frame.accept(new Frame(encoded.toByteArray(),image,boxes,received.get()*1000.0/Math.max(1,now-started),now-start,pending.receivedAt));image=null;
             }
-        }catch(Exception e){fail(e);}finally{
+        }catch(Exception | OutOfMemoryError | LinkageError e){fail(e);}finally{
             if(image!=null)image.recycle();scheduled.set(false);
             if(running.get()&&newest.get()!=null)schedule(150);
         }
     }
-    private void fail(Exception e){if(running.get())error.accept(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());close();}
+    private void fail(Throwable e){
+        if(!running.get())return;CrashDiagnostics.record("ESP 영상/YOLO",e);
+        try{error.accept(CameraFailure.from(e));}finally{close();}
+    }
     @Override public void close(){
         if(!running.getAndSet(false))return;newest.set(null);
         LocalCamera.Request active=request;if(active!=null)new Thread(active::close,"camera-close").start();

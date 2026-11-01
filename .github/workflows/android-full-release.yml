@@ -48,6 +48,30 @@ jobs:
       - name: Build and verify full APK
         working-directory: android
         run: ./gradlew --no-daemon -PbundledModelDir=../model-packs/minicpm-1b :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+      - name: Summarize tests and lint
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, xml.etree.ElementTree as ET
+          report = {'tests': 0, 'failures': 0, 'errors': 0, 'skipped': 0}
+          for path in Path('android/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              root = ET.parse(path).getroot()
+              for key in report:
+                  report[key] += int(root.get(key, 0))
+              for case in root.findall('testcase'):
+                  problem = case.find('failure')
+                  if problem is None:
+                      problem = case.find('error')
+                  if problem is not None:
+                      message = (problem.get('message', '') + ' ' + (problem.text or ''))[:1000].replace('%','%25').replace('\n','%0A').replace('\r','%0D')
+                      print('::error title=' + case.get('classname', '') + '.' + case.get('name', '') + '::' + message)
+          lint = Path('android/app/build/reports/lint-results-debug.xml')
+          if lint.exists():
+              report['lint_errors'] = sum(i.get('severity') in ('Error','Fatal') for i in ET.parse(lint).getroot())
+          Path('build-validation.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report))
+          PY
       - name: Prepare downloads
         run: |
           python3 - <<'PY'
@@ -58,6 +82,7 @@ jobs:
           if not version.endswith('-full'):
               raise SystemExit('Refusing to publish a lite build as the bundled app')
           folder=Path('release-apk');folder.mkdir(exist_ok=True)
+          shutil.copyfile('build-validation.json',folder/'checks.json')
           name='giljabi-'+version+'-debug.apk';target=folder/name
           shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk',target)
           with target.open('rb') as stream:
@@ -76,7 +101,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · 자동 AI 분석 / 백그라운드 실행' --notes-file android/FULL_RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · ESP 영상 안정화 / 자동 AI' --notes-file android/FULL_RELEASE_NOTES.md
   release-notes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04

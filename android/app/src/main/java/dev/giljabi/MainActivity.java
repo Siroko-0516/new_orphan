@@ -64,6 +64,7 @@ public final class MainActivity extends Activity {
     private BundledModels bundledModels;
     private String bundledError;
     private byte[] imageBytes;
+    // Never recycle a bitmap submitted to DetectionView: RenderThread may still use it.
     private Bitmap imageBitmap;
     private Uri cameraUri;
     private TextToSpeech tts;
@@ -118,6 +119,7 @@ public final class MainActivity extends Activity {
         liveStop=button(root,"ESP 영상 중지",v->stopLive());
         liveStatus=text(root,"휴대폰을 ESP32-CAM Wi-Fi에 연결하세요. YOLO는 모델 선택 없이 시작할 수 있습니다.",14);
         button(root,"ESP 연결 진단 · 사진/영상 확인",v->diagnoseCamera());
+        button(root,"앱 오류 기록 보기 · 복사",v->showDiagnostics());
         preview=new DetectionView(this);root.addView(preview,new LinearLayout.LayoutParams(-1,(int)(300*getResources().getDisplayMetrics().density)));
         bleStatus=text(root,"아두이노 · HM-10 BLE 미연결",14);
         bleDevices=new Spinner(this);root.addView(bleDevices);
@@ -174,6 +176,16 @@ public final class MainActivity extends Activity {
         });
         if(cloudSelected())setStatus("Gemini 선택됨 · 사진과 API 키를 준비하고 분석을 누르세요.");
         updateControls();
+    }
+    private void showDiagnostics(){
+        runJob(()->{String report=CrashDiagnostics.report(this);ui(()->{
+            TextView details=new TextView(this);details.setText(report);details.setTextIsSelectable(true);details.setPadding(24,12,24,12);
+            ScrollView scroll=new ScrollView(this);scroll.addView(details);
+            new AlertDialog.Builder(this).setTitle("앱 오류 기록").setView(scroll).setPositiveButton("복사",(dialog,which)->{
+                android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                if(clipboard!=null)clipboard.setPrimaryClip(android.content.ClipData.newPlainText("길잡이 오류 기록",report));
+            }).setNegativeButton("닫기",null).show();
+        });});
     }
     private TextView text(LinearLayout parent,String value,int size){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setPadding(0,12,0,12);parent.addView(t);return t;}
     private Button button(LinearLayout parent,String title,View.OnClickListener action){Button b=new Button(this);b.setText(title);b.setOnClickListener(action);parent.addView(b);controls.add(b);return b;}
@@ -245,8 +257,8 @@ public final class MainActivity extends Activity {
     }
     private void onMonitorFrame(MonitorService.ViewFrame frame){
         if(destroyed||!observingMonitor||!MonitorService.active()){frame.bitmap.recycle();return;}
-        Bitmap old=imageBitmap;imageBitmap=frame.bitmap;imageBytes=frame.jpeg;displayedBoxes=frame.boxes;imageFromLive=frame.detectionMs>=0;imageRevision++;
-        preview.update(imageBitmap,displayedBoxes);if(old!=null&&old!=imageBitmap)old.recycle();
+        imageBitmap=frame.bitmap;imageBytes=frame.jpeg;displayedBoxes=frame.boxes;imageFromLive=frame.detectionMs>=0;imageRevision++;
+        preview.update(imageBitmap,displayedBoxes);
         liveStatus.setText(String.format(Locale.ROOT,"실시간 입력 %d×%d · 수신 %.1f FPS · YOLO %dms · 물체 %d개",frame.bitmap.getWidth(),frame.bitmap.getHeight(),frame.fps,frame.detectionMs,frame.boxes.size()));
     }
     private void updateControls(){
@@ -302,7 +314,7 @@ public final class MainActivity extends Activity {
         try{
             WifiCamera.Choice choice=WifiCamera.choose(this,address);int generation=++liveGeneration;tracker.reset();
             liveStatus.setText(choice.description+"\nESP 영상 연결 중...");
-            live=new LiveCamera(this,address,choice.connector,jpeg->decodeImage(new ByteArrayInputStream(jpeg),1),frame->onLiveFrame(generation,frame),message->ui(()->{if(generation==liveGeneration)liveStatus.setText(choice.description+"\n"+message);}),message->ui(()->{if(generation==liveGeneration){stopLive();liveStatus.setText("영상 중지: "+message);}}));
+            live=new LiveCamera(this,address,choice.connector,jpeg->decodeImage(new ByteArrayInputStream(jpeg),1),frame->onLiveFrame(generation,frame),message->ui(()->{if(generation==liveGeneration)liveStatus.setText(choice.description+"\n"+message);}),message->ui(()->{if(generation==liveGeneration){stopLive();liveStatus.setText("영상 중지: "+message.message);}}));
             updateControls();
         }catch(Exception e){liveStatus.setText(e.getMessage());}
     }
@@ -311,8 +323,8 @@ public final class MainActivity extends Activity {
         runOnUiThread(()->{
             framePosted.set(false);
             if(destroyed||live==null||generation!=liveGeneration){frame.bitmap.recycle();return;}
-            Bitmap old=imageBitmap;imageBitmap=frame.bitmap;imageBytes=frame.jpeg;displayedBoxes=frame.boxes;imageFromLive=frame.detectionMs>=0;imageRevision++;
-            preview.update(imageBitmap,displayedBoxes);if(old!=null&&old!=imageBitmap)old.recycle();
+            imageBitmap=frame.bitmap;imageBytes=frame.jpeg;displayedBoxes=frame.boxes;imageFromLive=frame.detectionMs>=0;imageRevision++;
+            preview.update(imageBitmap,displayedBoxes);
             if(frame.detectionMs<0){liveStatus.setText("ESP 첫 사진 수신 확인 · YOLO 불러오는 중...");updateControls();return;}
             YoloDetector.Box event=tracker.update(frame.boxes,SystemClock.elapsedRealtime());
             String signal="";
@@ -441,7 +453,7 @@ public final class MainActivity extends Activity {
     private Bitmap decodeImage(InputStream input,int orientation)throws IOException {return PhotoCodec.decode(input,orientation);}
     private void setPicture(Bitmap bitmap) throws IOException {
         checkCancelled();ByteArrayOutputStream bytes=new ByteArrayOutputStream();if(!bitmap.compress(Bitmap.CompressFormat.JPEG,90,bytes))throw new IOException("사진 변환 실패");byte[] jpeg=bytes.toByteArray();
-        runOnUiThread(()->{if(destroyed||cancelled.get()){bitmap.recycle();return;}Bitmap old=imageBitmap;imageBitmap=bitmap;imageBytes=jpeg;imageFromLive=false;imageRevision++;displayedBoxes=Collections.emptyList();preview.update(bitmap,displayedBoxes);if(old!=null&&old!=bitmap)old.recycle();setStatus("사진 준비 완료 · "+bitmap.getWidth()+"×"+bitmap.getHeight());});
+        runOnUiThread(()->{if(destroyed||cancelled.get()){bitmap.recycle();return;}imageBitmap=bitmap;imageBytes=jpeg;imageFromLive=false;imageRevision++;displayedBoxes=Collections.emptyList();preview.update(bitmap,displayedBoxes);setStatus("사진 준비 완료 · "+bitmap.getWidth()+"×"+bitmap.getHeight());});
     }
     @Override protected void onStart(){super.onStart();observingMonitor=true;MonitorService.observe(monitorObserver);}
     @Override protected void onStop(){observingMonitor=false;MonitorService.forget(monitorObserver);cancelled.set(true);abortCameraRequest();abortCloudRequest();stopLive();if(ble!=null)ble.close();if(tts!=null)tts.stop();super.onStop();}

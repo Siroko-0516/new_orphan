@@ -12,8 +12,8 @@ android {
         applicationId = "dev.giljabi.camera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = if (bundledModelDir.isPresent) "0.5.0-full" else "0.5.0-lite"
+        versionCode = 7
+        versionName = if (bundledModelDir.isPresent) "0.5.1-full" else "0.5.1-lite"
         buildConfigField("boolean", "BUNDLED_AI", bundledModelDir.isPresent.toString())
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild { cmake { arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"); targets += "giljabi_native" } }
@@ -23,12 +23,14 @@ android {
     packaging { jniLibs.useLegacyPackaging = true }
     buildTypes { release { isMinifyEnabled = false } }
     buildFeatures { buildConfig = true }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     androidResources { noCompress += "gguf" }
 }
 dependencies {
     implementation("androidx.core:core:1.15.0")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("org.json:json:20250517")
 }
 val prepareYolo by tasks.registering(Copy::class) {
