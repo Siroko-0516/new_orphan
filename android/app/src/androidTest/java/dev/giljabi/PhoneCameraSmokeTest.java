@@ -54,7 +54,7 @@ public class PhoneCameraSmokeTest {
         try(ActivityScenario<MainActivity> activity=ActivityScenario.launch(MainActivity.class)){
             main(()->MonitorService.observe(observer));
             activity.onActivity(a->{
-                View root=a.getWindow().getDecorView();Spinner sources=(Spinner)find(root,v->"영상 입력 선택".contentEquals(v.getContentDescription()));assertNotNull(sources);sources.setSelection(CameraSource.BACK);
+                View root=a.getWindow().getDecorView();Spinner sources=(Spinner)find(root,v->"영상 입력 선택".equals(v.getContentDescription()));assertNotNull(sources);sources.setSelection(CameraSource.BACK);
             });
             InstrumentationRegistry.getInstrumentation().waitForIdleSync();
             activity.onActivity(a->{

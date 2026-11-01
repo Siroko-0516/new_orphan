@@ -36,13 +36,35 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect -camera-back emulated -camera-front emulated
           working-directory: android
-          script: ./gradlew --no-daemon -PcameraSmokeOnly=true :app:connectedDebugAndroidTest :app:testDebugUnitTest :app:lintDebug
+          script: bash scripts/camera_smoke.sh
+      - name: Summarize camera and regression checks
+        if: always()
+        run: |
+          python3 - <<'PYREPORT'
+          from pathlib import Path
+          import json, xml.etree.ElementTree as ET
+          report={}
+          for kind,folder in [('camera','android/app/build/outputs/androidTest-results'),('unit','android/app/build/test-results')]:
+              totals={'tests':0,'failures':0,'errors':0,'skipped':0}
+              for path in Path(folder).rglob('TEST-*.xml'):
+                  root=ET.parse(path).getroot()
+                  for key in totals: totals[key]+=int(root.get(key,0))
+                  for case in root.iter('testcase'):
+                      for problem in list(case.findall('failure'))+list(case.findall('error')):
+                          text=(case.get('name','')+': '+(problem.text or problem.get('message','')))[:3000]
+                          print('::error::'+text.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+              report[kind]=totals
+          print(json.dumps(report))
+          Path('android/camera-validation.json').write_text(json.dumps(report,indent=2)+'\n')
+          PYREPORT
       - name: Upload camera test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phone-camera-validation
           path: |
+            android/camera-validation.json
+            android/camera-smoke.log
             android/app/build/reports/
             android/app/build/outputs/androidTest-results/
             android/app/build/test-results/

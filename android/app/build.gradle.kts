@@ -13,8 +13,8 @@ android {
         applicationId = "dev.giljabi.camera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = if (bundledModelDir.isPresent) "0.6.0-full" else "0.6.0-lite"
+        versionCode = 11
+        versionName = if (bundledModelDir.isPresent) "0.6.1-full" else "0.6.1-lite"
         buildConfigField("boolean", "BUNDLED_AI", bundledModelDir.isPresent.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += if (cameraSmokeOnly) "x86_64" else "arm64-v8a" }

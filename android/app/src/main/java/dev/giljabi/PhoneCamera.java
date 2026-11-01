@@ -150,7 +150,9 @@ final class PhoneCamera implements VideoSource {
         finally{input.close();if(bitmap!=null)bitmap.recycle();processing.set(false);}
     }
     private void fail(Throwable failure){
-        if(!running.get())return;CrashDiagnostics.record("휴대폰 영상/YOLO",failure);
+        if(!running.get())return;
+        if(failure instanceof CameraAccessException){CameraAccessException cameraError=(CameraAccessException)failure;failure=cameraError.getReason()==CameraAccessException.CAMERA_DISABLED?new SecurityException("기기 설정에서 카메라 사용이 차단됐습니다.",cameraError):new IOException("휴대폰 카메라에 접근하지 못했습니다. 다른 카메라 앱을 종료하세요.",cameraError);}
+        CrashDiagnostics.record("휴대폰 영상/YOLO",failure);
         try{error.accept(CameraFailure.from(failure));}finally{close();}
     }
     @Override public void close(){
