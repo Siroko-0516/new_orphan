@@ -1,6 +1,20 @@
 # 길잡이 테스트 APK
 
-## 최신 · 자동 AI 분석 / 백그라운드 실행 · 0.5.0-full
+## 최신 · ESP 영상 종료 오류 대응 · 0.5.1-full
+
+**[giljabi-0.5.1-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.1-full/giljabi-0.5.1-full-debug.apk)** · [릴리스와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.5.1-full)
+
+영상·YOLO 실행 중 종료 문제를 조사하며 이전 화면 이미지의 즉시 해제를 제거하고 YOLO 입력 메모리를 재사용하도록 수정했습니다. 실제 기기의 오류 스택을 아직 확보하지 못해 모든 종료 원인 해결을 확정하지는 않습니다.
+
+- **이전 공개 0.5.0과 서명이 달라 기존 길잡이 삭제 후 설치해야 합니다.** 삭제하면 API 키·설정·준비된 모델 복사본이 삭제됩니다. 모델은 APK에 있어 첫 사용 시 다시 준비합니다.
+- 로컬 모델을 모두 포함한 약 **1.8GB** APK입니다. Android 8 이상 ARM64용이며 내부 여유 공간 6GB 이상을 권장합니다.
+- ESP Wi-Fi 연결 → 앱에서 `http://192.168.4.1:81/stream` → **ESP 영상 + YOLO 시작**으로 확인합니다. 브라우저의 별도 카메라 스트림은 닫습니다.
+- 계속 종료되면 앱 재실행 → **앱 오류 기록 보기 · 복사**를 사용합니다. Android 11 이상은 시스템의 최근 종료 이유도 표시합니다. 기록은 자동 전송하지 않으며, 삭제·재설치 시 이전 기록이 사라질 수 있습니다.
+- 로컬/Gemini 자동 분석·백그라운드·HM-10 BLE는 유지합니다. 자동 모드는 **실시간 AI + 백그라운드 시작**, 종료는 앱 또는 알림의 **중지**입니다. Gemini는 개인 키·인터넷이 필요하고 자동 실행 중 사진을 반복 전송해 요금이 발생할 수 있습니다.
+
+빌드·테스트 **66개 통과**, Lint 오류 0과 공개 APK의 서명·체크섬·내장 모델을 확인했습니다. 실제 휴대폰에서 장시간 동작 확인은 필요합니다. [수정·검사 상세](../android/STREAM_CRASH_FIX.md) · [자동 실행 안내](../android/BACKGROUND.md).
+
+## 이전 · 자동 AI 분석 / 백그라운드 실행 · 0.5.0-full
 
 **[giljabi-0.5.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.0-full/giljabi-0.5.0-full-debug.apk)** · [릴리스와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.5.0-full)
 
