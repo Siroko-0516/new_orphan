@@ -66,7 +66,7 @@ public final class MonitorService extends Service {
     private volatile boolean monitoring,stopping;
     private volatile int cameraGeneration;
     private ScheduledFuture<?> repeat;
-    private LiveCamera camera;
+    private VideoSource camera;
     private BleLink ble;
     private final ObstacleTracker tracker=new ObstacleTracker();
     private TextToSpeech tts;private boolean ttsReady,cleanupQueued,cleanupComplete,destroyed,foreground;
@@ -91,11 +91,14 @@ public final class MonitorService extends Service {
         try{
             MonitorConfig next=MonitorConfig.read(intent);next.validate();
             if(UPDATE.equals(action)&&monitoring&&!stopping){
+                if(next.source!=config.source||!next.address.equals(config.address))throw new IOException("영상 입력을 바꾸려면 먼저 실시간 실행을 중지하세요.");
                 synchronized(modeLock){config=next;gate.reset();}closeRequest();if(tts!=null)tts.stop();lastSpoken="";result="";status=(next.cloud?"Gemini":"로컬 AI")+"로 전환 중 · 이전 분석 처리 후 최신 프레임을 사용합니다.";publish();return START_NOT_STICKY;
             }
             if(!START.equals(action)||monitoring||stopping||cleanupQueued)return START_NOT_STICKY;
             config=next;
-            int types=Build.VERSION.SDK_INT>=29?ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE|ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK:0;
+            int types=Build.VERSION.SDK_INT>=29?ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK:0;
+            if(Build.VERSION.SDK_INT>=29&&(next.source==CameraSource.ESP||!next.bleAddress.isEmpty()))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
+            if(Build.VERSION.SDK_INT>=30&&CameraSource.phone(next.source))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
             ServiceCompat.startForeground(this,NOTIFICATION,notification(),types);foreground=true;monitoring=true;gate.start();acquireLocks();
             tts=new TextToSpeech(getApplicationContext(),code->{ttsReady=code==TextToSpeech.SUCCESS;if(!ttsReady){status="음성 초기화 실패 · 화면 결과로 확인하세요.";publish();}});
             tts.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
@@ -105,11 +108,16 @@ public final class MonitorService extends Service {
     }
     private void acquireLocks(){
         PowerManager power=getSystemService(PowerManager.class);if(power!=null){wake=power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"giljabi:monitor");wake.setReferenceCounted(false);wake.acquire(TimeUnit.MINUTES.toMillis(30));main.postDelayed(renew,TimeUnit.MINUTES.toMillis(10));}
-        WifiManager wifi=(WifiManager)getApplicationContext().getSystemService(Context.WIFI_SERVICE);if(wifi!=null){wifiLock=wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF,"giljabi:esp-camera");wifiLock.setReferenceCounted(false);wifiLock.acquire();}
+        WifiManager wifi=(WifiManager)getApplicationContext().getSystemService(Context.WIFI_SERVICE);if(wifi!=null&&config.source==CameraSource.ESP){wifiLock=wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF,"giljabi:esp-camera");wifiLock.setReferenceCounted(false);wifiLock.acquire();}
     }
     private void openCamera(){
         if(!monitoring||stopping)return;main.removeCallbacks(reconnect);int generation=++cameraGeneration;
         try{
+            if(CameraSource.phone(config.source)){
+                status=CameraSource.label(config.source)+" 시작 중";publish();
+                camera=new PhoneCamera(this,config.source,frame->acceptFrame(generation,frame),progress->main.post(()->{if(monitoring&&!stopping&&generation==cameraGeneration){status=progress;publish();}}),error->main.post(()->cameraError(generation,error)));
+                return;
+            }
             WifiCamera.Choice choice=WifiCamera.choose(this,config.address);status="ESP 연결 중 · "+choice.description;publish();
             camera=new LiveCamera(this,config.address,choice.connector,jpeg->PhotoCodec.decode(new ByteArrayInputStream(jpeg),1),frame->acceptFrame(generation,frame),
                 progress->main.post(()->{if(monitoring&&!stopping&&generation==cameraGeneration){status=progress;publish();}}),
@@ -118,8 +126,8 @@ public final class MonitorService extends Service {
     }
     private void cameraError(int generation,CameraFailure error){
         if(!monitoring||stopping||generation!=cameraGeneration)return;
-        if(!error.retryable){terminalError=error.message;stopMonitoring();return;}cameraGeneration++;LiveCamera old=camera;camera=null;if(old!=null)old.close();clearFrame();
-        synchronized(modeLock){gate.invalidateFrames();}closeRequest();status="ESP 연결 끊김 · 5초 후 재연결: "+error.message;publish();main.removeCallbacks(reconnect);main.postDelayed(reconnect,5000);
+        if(!error.retryable){terminalError=error.message;stopMonitoring();return;}cameraGeneration++;VideoSource old=camera;camera=null;if(old!=null)old.close();clearFrame();
+        synchronized(modeLock){gate.invalidateFrames();}closeRequest();status=CameraSource.label(config.source)+" 연결 끊김 · 5초 후 재연결: "+error.message;publish();main.removeCallbacks(reconnect);main.postDelayed(reconnect,5000);
     }
     private void acceptFrame(int generation,LiveCamera.Frame frame){
         synchronized(frameLock){

@@ -40,7 +40,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_MODEL=10, PICK_VISION=11, PICK_PHOTO=12, TAKE_PHOTO=13, BLE_PERMISSIONS=20, ENABLE_BLUETOOTH=21,NOTIFICATION_PERMISSION=22;
+    private static final int PICK_MODEL=10, PICK_VISION=11, PICK_PHOTO=12, TAKE_PHOTO=13, BLE_PERMISSIONS=20, ENABLE_BLUETOOTH=21,NOTIFICATION_PERMISSION=22,CAMERA_PERMISSION=23;
     private final ExecutorService jobs=Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled=new AtomicBoolean();
     private final List<View> controls=new ArrayList<>();
@@ -49,7 +49,9 @@ public final class MainActivity extends Activity {
     private EditText prompt,ip;
     private CheckBox speak,yoloEnabled,notifyObjects;
     private YoloDetector yolo;
-    private Spinner language;
+    private Spinner language,cameraSource;
+    private Runnable cameraPermissionAction;
+    private Button espDiagnose,espPhoto;
     private RadioGroup aiModes;
     private RadioButton localMode,cloudMode;
     private TextView providerHelp;
@@ -84,7 +86,7 @@ public final class MainActivity extends Activity {
     private final List<BleLink.Device> foundDevices=new ArrayList<>();
     private final ObstacleTracker tracker=new ObstacleTracker();
     private final AtomicBoolean framePosted=new AtomicBoolean();
-    private LiveCamera live;
+    private VideoSource live;
     private volatile LocalCamera.Request cameraRequest;
     private int liveGeneration,imageRevision;
     private boolean imageFromLive;
@@ -100,7 +102,7 @@ public final class MainActivity extends Activity {
         localVlm=LocalVlm.get(this);modelFile=localVlm.modelFile;visionFile=localVlm.visionFile;bundledModels=localVlm.bundle;bundledError=localVlm.bundleError;
         ScrollView scroll=new ScrollView(this);LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,28,24,24);scroll.addView(root);setContentView(scroll);
         root.setOnApplyWindowInsetsListener((v,insets)->{root.setPadding(24,28+insets.getSystemWindowInsetTop(),24,24+insets.getSystemWindowInsetBottom());return insets;});
-        TextView title=text(root,"길잡이 · ESP 카메라",22);title.setTextColor(Color.rgb(35,80,55));
+        TextView title=text(root,"길잡이 · 카메라",22);title.setTextColor(Color.rgb(35,80,55));
         text(root,"장면 설명 AI 선택",18);
         aiModes=new RadioGroup(this);aiModes.setOrientation(RadioGroup.HORIZONTAL);root.addView(aiModes);
         localMode=new RadioButton(this);localMode.setId(View.generateViewId());localMode.setText("로컬 AI · 오프라인");RadioGroup.LayoutParams localLayout=new RadioGroup.LayoutParams(0,-2);localLayout.weight=1;aiModes.addView(localMode,localLayout);controls.add(localMode);
@@ -108,6 +110,8 @@ public final class MainActivity extends Activity {
         aiModes.check(settings.getBoolean("cloud",false)?cloudMode.getId():localMode.getId());
         providerHelp=text(root,"",14);
         cloudSettingsButton=button(root,"Gemini API 키 · 모델 설정",v->cloudSettings());
+        text(root,"영상 입력 선택",18);
+        cameraSource=new Spinner(this);cameraSource.setContentDescription("영상 입력 선택");cameraSource.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,CameraSource.LABELS));cameraSource.setSelection(Math.max(0,Math.min(2,settings.getInt("camera_source",CameraSource.ESP))));root.addView(cameraSource);controls.add(cameraSource);
         ip=new EditText(this);ip.setSingleLine(true);ip.setText("http://192.168.4.1:81/stream");root.addView(ip);controls.add(ip);
         text(root,"자동 장면 설명 · 백그라운드 실행",18);
         autoInterval=new Spinner(this);autoInterval.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"최소 시작 간격 3초","최소 시작 간격 5초","최소 시작 간격 10초","최소 시작 간격 20초"}));autoInterval.setSelection(1);root.addView(autoInterval);controls.add(autoInterval);
@@ -116,9 +120,9 @@ public final class MainActivity extends Activity {
         autoRetry=button(root,"장면 설명 재시도",v->MonitorService.retry(this));
         autoStatus=text(root,"이전 분석이 끝나면 최신 프레임을 사용합니다. 실행 알림의 중지 버튼으로도 종료할 수 있습니다.",14);
         liveStart=button(root,"ESP 영상 + YOLO 시작",v->startLive());
-        liveStop=button(root,"ESP 영상 중지",v->stopLive());
+        liveStop=button(root,"영상 중지",v->stopLive());
         liveStatus=text(root,"휴대폰을 ESP32-CAM Wi-Fi에 연결하세요. YOLO는 모델 선택 없이 시작할 수 있습니다.",14);
-        button(root,"ESP 연결 진단 · 사진/영상 확인",v->diagnoseCamera());
+        espDiagnose=button(root,"ESP 연결 진단 · 사진/영상 확인",v->diagnoseCamera());
         button(root,"앱 오류 기록 보기 · 복사",v->showDiagnostics());
         preview=new DetectionView(this);root.addView(preview,new LinearLayout.LayoutParams(-1,(int)(300*getResources().getDisplayMetrics().density)));
         bleStatus=text(root,"아두이노 · HM-10 BLE 미연결",14);
@@ -150,7 +154,7 @@ public final class MainActivity extends Activity {
         release=button(localPanel,"모델 메모리 해제",v->runJob(()->{unload();ui(()->setStatus("모델 메모리를 해제했습니다."));}));
         button(root,"사진 선택",v->pick(PICK_PHOTO,"image/*"));
         button(root,"카메라 촬영",v->takePhoto());
-        button(root,"ESP32 사진 한 장 받기",v->{String address=ip.getText().toString().trim();stopLive();runJob(()->{byte[] jpeg=fetchCameraFrame(address);checkCancelled();setPicture(decodeImage(new ByteArrayInputStream(jpeg),1));});});
+        espPhoto=button(root,"ESP32 사진 한 장 받기",v->{String address=ip.getText().toString().trim();stopLive();runJob(()->{byte[] jpeg=fetchCameraFrame(address);checkCancelled();setPicture(decodeImage(new ByteArrayInputStream(jpeg),1));});});
         language=new Spinner(this);language.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"English","한국어"}));root.addView(language);controls.add(language);
         prompt=new EditText(this);prompt.setMinLines(3);prompt.setText("Describe the main visible objects and their positions. Mention visible obstacles. Do not guess distance, motion or collision risk. Use two short sentences.");root.addView(prompt);controls.add(prompt);
         language.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
@@ -175,7 +179,19 @@ public final class MainActivity extends Activity {
             updateControls();
         });
         if(cloudSelected())setStatus("Gemini 선택됨 · 사진과 API 키를 준비하고 분석을 누르세요.");
+        cameraSource.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+            public void onNothingSelected(AdapterView<?> parent){}
+            public void onItemSelected(AdapterView<?> parent,View view,int position,long id){
+                if(!applyingMonitorState&&!MonitorService.active()){stopLive();settings.edit().putInt("camera_source",position).apply();liveStatus.setText(CameraSource.phone(position)?"휴대폰 카메라 선택됨 · 영상 + YOLO 또는 실시간 AI 시작을 누르세요. 자동 실행 중에는 카메라 사용 알림이 표시됩니다.":"휴대폰을 ESP32-CAM Wi-Fi에 연결하세요.");}
+                updateControls();
+            }
+        });
         updateControls();
+    }
+    private int selectedSource(){return cameraSource.getSelectedItemPosition();}
+    private boolean requireCamera(Runnable action){
+        if(checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)return true;
+        cameraPermissionAction=action;requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA_PERMISSION);return false;
     }
     private void showDiagnostics(){
         runJob(()->{String report=CrashDiagnostics.report(this);ui(()->{
@@ -232,10 +248,11 @@ public final class MainActivity extends Activity {
         Object selected=bleDevices.getSelectedItem();String address="";
         if(selected instanceof BleLink.Device&&(Build.VERSION.SDK_INT<31||checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED))address=((BleLink.Device)selected).device.getAddress();
         if(address.isEmpty()&&MonitorService.active()&&MonitorService.snapshot().config!=null)address=MonitorService.snapshot().config.bleAddress;
-        return new MonitorConfig(ip.getText().toString().trim(),prompt.getText().toString().trim(),cloudModel(),cloudSelected(),speak.isChecked(),yoloEnabled.isChecked(),notifyObjects.isChecked(),INTERVALS[autoInterval.getSelectedItemPosition()],address,serviceUuid.getText().toString().trim(),characteristicUuid.getText().toString().trim());
+        return new MonitorConfig(ip.getText().toString().trim(),prompt.getText().toString().trim(),cloudModel(),cloudSelected(),speak.isChecked(),yoloEnabled.isChecked(),notifyObjects.isChecked(),INTERVALS[autoInterval.getSelectedItemPosition()],address,serviceUuid.getText().toString().trim(),characteristicUuid.getText().toString().trim(),selectedSource());
     }
     private void startMonitor(){
         if(busy||MonitorService.active())return;
+        if(CameraSource.phone(selectedSource())&&!requireCamera(this::startMonitor))return;
         if(cloudSelected()&&!apiKeys.hasKey()){cloudSettings();return;}
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED&&!settings.getBoolean("notification_asked",false)){
             settings.edit().putBoolean("notification_asked",true).apply();requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATION_PERMISSION);return;
@@ -250,7 +267,7 @@ public final class MainActivity extends Activity {
         if(destroyed)return;
         if(snapshot.active&&!monitorWasActive&&snapshot.config!=null){
             MonitorConfig c=snapshot.config;applyingMonitorState=true;
-            aiModes.check(c.cloud?cloudMode.getId():localMode.getId());ip.setText(c.address);prompt.setText(c.question);speak.setChecked(c.speak);yoloEnabled.setChecked(c.useYolo);notifyObjects.setChecked(c.notify);
+            aiModes.check(c.cloud?cloudMode.getId():localMode.getId());cameraSource.setSelection(c.source);ip.setText(c.address);prompt.setText(c.question);speak.setChecked(c.speak);yoloEnabled.setChecked(c.useYolo);notifyObjects.setChecked(c.notify);
             serviceUuid.setText(c.serviceUuid);characteristicUuid.setText(c.characteristicUuid);
             for(int i=0;i<INTERVALS.length;i++)if(INTERVALS[i]==c.intervalMs)autoInterval.setSelection(i);
             applyingMonitorState=false;
@@ -270,7 +287,10 @@ public final class MainActivity extends Activity {
         boolean canPrepare=bundledModels!=null||(!BuildConfig.BUNDLED_AI&&modelFile.exists()&&visionFile.exists());
         load.setEnabled(!busy&&!active&&!loaded&&canPrepare);
         release.setEnabled(!busy&&!active&&loaded);analyze.setEnabled(!busy&&!active&&(cloudSelected()||loaded||bundledModels!=null)&&imageBytes!=null);stop.setEnabled(busy);
-        liveStart.setEnabled(!busy&&!active&&live==null);liveStop.setEnabled(live!=null);ip.setEnabled(!busy&&!active&&live==null);
+        liveStart.setEnabled(!busy&&!active&&live==null);liveStop.setEnabled(live!=null);ip.setEnabled(!busy&&!active&&live==null&&selectedSource()==CameraSource.ESP);
+        cameraSource.setEnabled(!busy&&!active&&live==null);
+        espDiagnose.setEnabled(!busy&&!active&&selectedSource()==CameraSource.ESP);espPhoto.setEnabled(!busy&&!active&&selectedSource()==CameraSource.ESP);
+        liveStart.setText(CameraSource.label(selectedSource())+" 영상 + YOLO 시작");
         bleDevices.setEnabled(!active&&!busy);serviceUuid.setEnabled(!active&&!busy);characteristicUuid.setEnabled(!active&&!busy);
         bleScan.setEnabled(!active&&!busy);bleConnect.setEnabled(!active&&!busy);bleDisconnect.setEnabled(!active&&!busy);bleTest.setEnabled(active?state.bleReady&&!state.stopping:ble.isReady());
         speak.setEnabled(!active&&!busy);notifyObjects.setEnabled(!active&&!busy);
@@ -313,9 +333,16 @@ public final class MainActivity extends Activity {
         });
     }
     private void startLive(){
-        if(busy||MonitorService.active()||live!=null)return;String address=ip.getText().toString().trim();
+        if(busy||MonitorService.active()||live!=null)return;
+        if(CameraSource.phone(selectedSource())&&!requireCamera(this::startLive))return;
+        String address=ip.getText().toString().trim();
         try{
-            WifiCamera.Choice choice=WifiCamera.choose(this,address);int generation=++liveGeneration;tracker.reset();
+            int generation=++liveGeneration;tracker.reset();
+            if(CameraSource.phone(selectedSource())){
+                live=new PhoneCamera(this,selectedSource(),frame->onLiveFrame(generation,frame),message->ui(()->{if(generation==liveGeneration)liveStatus.setText(message);}),failure->ui(()->{if(generation==liveGeneration){stopLive();liveStatus.setText("영상 중지: "+failure.message);}}));
+                updateControls();return;
+            }
+            WifiCamera.Choice choice=WifiCamera.choose(this,address);
             liveStatus.setText(choice.description+"\nESP 영상 연결 중...");
             live=new LiveCamera(this,address,choice.connector,jpeg->decodeImage(new ByteArrayInputStream(jpeg),1),frame->onLiveFrame(generation,frame),message->ui(()->{if(generation==liveGeneration)liveStatus.setText(choice.description+"\n"+message);}),message->ui(()->{if(generation==liveGeneration){stopLive();liveStatus.setText("영상 중지: "+message.message);}}));
             updateControls();
@@ -328,7 +355,7 @@ public final class MainActivity extends Activity {
             if(destroyed||live==null||generation!=liveGeneration){frame.bitmap.recycle();return;}
             imageBitmap=frame.bitmap;imageBytes=frame.jpeg;displayedBoxes=frame.boxes;imageFromLive=frame.detectionMs>=0;imageRevision++;
             preview.update(imageBitmap,displayedBoxes);
-            if(frame.detectionMs<0){liveStatus.setText("ESP 첫 사진 수신 확인 · YOLO 불러오는 중...");updateControls();return;}
+            if(frame.detectionMs<0){liveStatus.setText("첫 영상 수신 확인 · YOLO 불러오는 중...");updateControls();return;}
             YoloDetector.Box event=tracker.update(frame.boxes,SystemClock.elapsedRealtime());
             String signal="";
             if(event!=null&&notifyObjects.isChecked()&&ble.isReady()&&ble.send("OBSTACLE\n"))signal=" · 새 물체 신호 요청: "+YoloDetector.LABELS[event.label];
@@ -336,7 +363,7 @@ public final class MainActivity extends Activity {
             updateControls();
         });
     }
-    private void stopLive(){liveGeneration++;LiveCamera old=live;live=null;if(old!=null)old.close();tracker.reset();if(liveStatus!=null)liveStatus.setText("ESP 영상 중지됨");if(status!=null)updateControls();}
+    private void stopLive(){liveGeneration++;VideoSource old=live;live=null;if(old!=null)old.close();tracker.reset();if(liveStatus!=null)liveStatus.setText("영상 중지됨");if(status!=null)updateControls();}
     private boolean hasBlePermissions(){
         if(Build.VERSION.SDK_INT>=31)return checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED;
         return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
@@ -352,7 +379,7 @@ public final class MainActivity extends Activity {
             ble.scan();
         }catch(SecurityException e){bleStatus.setText("주변 기기 권한을 허용하세요.");}
     }
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==NOTIFICATION_PERMISSION){startMonitor();return;}if(request==BLE_PERMISSIONS){if(hasBlePermissions())scanBle();else bleStatus.setText("BLE 사용에 필요한 권한이 허용되지 않았습니다.");}}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==CAMERA_PERMISSION){Runnable pending=cameraPermissionAction;cameraPermissionAction=null;if(checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED){if(pending!=null)pending.run();}else setStatus("카메라 권한이 필요합니다. 휴대폰 설정 → 앱 → 길잡이 → 권한에서 허용하세요.");return;}if(request==NOTIFICATION_PERMISSION){startMonitor();return;}if(request==BLE_PERMISSIONS){if(hasBlePermissions())scanBle();else bleStatus.setText("BLE 사용에 필요한 권한이 허용되지 않았습니다.");}}
     private interface Task {void run() throws Exception;}
     private void runJob(Task task){
         if(busy)return;busy=true;cancelled.set(false);updateControls();
@@ -365,6 +392,7 @@ public final class MainActivity extends Activity {
     private void checkCancelled(){if(cancelled.get()||destroyed)throw new CancellationException();}
     private void pick(int request,String type){stopLive();Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType(type);intent.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(intent,request);}
     private void takePhoto(){
+        if(!requireCamera(this::takePhoto))return;
         stopLive();
         File folder=new File(getCacheDir(),"photos");folder.mkdirs();File photo=new File(folder,"camera.jpg");
         cameraUri=FileProvider.getUriForFile(this,getPackageName()+".photos",photo);

@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.*;
 import java.util.function.Consumer;
 
 /** Reader continually drains MJPEG; detector consumes only the newest pending frame. */
-final class LiveCamera implements AutoCloseable {
+final class LiveCamera implements VideoSource {
     interface Decoder {Bitmap decode(byte[] jpeg) throws Exception;}
     static final class Frame {
         final byte[] jpeg;final Bitmap bitmap;final List<YoloDetector.Box> boxes;

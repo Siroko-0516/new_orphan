@@ -3,6 +3,7 @@ import java.security.MessageDigest
 
 plugins { id("com.android.application") }
 
+val cameraSmokeOnly = providers.gradleProperty("cameraSmokeOnly").orNull == "true"
 val bundledModelDir = providers.gradleProperty("bundledModelDir")
 android {
     namespace = "dev.giljabi"
@@ -12,13 +13,14 @@ android {
         applicationId = "dev.giljabi.camera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = if (bundledModelDir.isPresent) "0.5.3-full" else "0.5.3-lite"
+        versionCode = 10
+        versionName = if (bundledModelDir.isPresent) "0.6.0-full" else "0.6.0-lite"
         buildConfigField("boolean", "BUNDLED_AI", bundledModelDir.isPresent.toString())
-        ndk { abiFilters += "arm64-v8a" }
-        externalNativeBuild { cmake { arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"); targets += "giljabi_native" } }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk { abiFilters += if (cameraSmokeOnly) "x86_64" else "arm64-v8a" }
+        if (!cameraSmokeOnly) externalNativeBuild { cmake { arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"); targets += "giljabi_native" } }
     }
-    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
+    if (!cameraSmokeOnly) externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     packaging { jniLibs.useLegacyPackaging = true }
     buildTypes { release { isMinifyEnabled = false } }
@@ -29,6 +31,10 @@ android {
 dependencies {
     implementation("androidx.core:core:1.15.0")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("org.json:json:20250517")
