@@ -1,5 +1,14 @@
 # 길잡이 테스트 APK
 
+## 앱이 네이티브 오류로 종료될 때 · PC 로그 수집
+
+앱의 종료 요약이 `네이티브 오류 종료`와 status 6(SIGABRT)을 표시하면 `Abort message`와 backtrace가 추가로 필요합니다. 앱의 마지막 저장 단계만으로 JPEG·YOLO·화면 렌더러 중 어느 코드가 중단됐는지 확정하지 않습니다.
+
+- [Windows 로그 수집 도구 ZIP](giljabi-native-crash-collector.zip) · [소스와 사용법](../android/scripts/native-crash-collector/README.md)
+- [Google 공식 ADB platform-tools ZIP](https://dl.google.com/android/repository/platform-tools-latest-windows.zip)
+
+공식 platform-tools를 압축 해제하고 도구의 CMD 파일을 adb.exe 옆에 복사합니다. 휴대폰 USB 디버깅을 켜고 연결·허용한 뒤 CMD를 실행하면 길잡이의 마지막 네이티브 충돌에서 메시지와 호출 스택을 추려 `giljabi-native.txt`에 저장합니다. 현재 설치와 로그를 그대로 유지하며 앱 데이터나 로그 버퍼를 지우지 않습니다. 기록은 자동 전송하지 않습니다. 원본 `giljabi-crash-local.txt`에는 다른 앱의 기록도 있을 수 있어 전체를 공유하지 마세요. 실제 Windows와 휴대폰에서 이 도구 실행은 아직 검증하지 못했습니다.
+
 ## 최신 · ESP 영상 종료 오류 대응 · 0.5.1-full
 
 **[giljabi-0.5.1-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.1-full/giljabi-0.5.1-full-debug.apk)** · [릴리스와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.5.1-full)
