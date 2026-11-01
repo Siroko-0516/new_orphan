@@ -1,0 +1,132 @@
+{
+  "version": "0.8.2-full",
+  "version_code": 15,
+  "source": "eb2c4f70832b69374931a3f9ce6714f8bf26db66",
+  "ci_run": 41324246591,
+  "bytes": 1826247214,
+  "sha256": "19b231c8b7fa3bb875160bbc5238168e69ba2a064fdb1fd96ad71a03b255f99c",
+  "apk_v2_verified": true,
+  "certificate_sha256": "cf3117682ef3f2246e2ea895797800813622a22485120dc0647f2df4b9c3ef27",
+  "same_signing_certificate_as_public_0_7_0": false,
+  "zipalign_16k": true,
+  "models": {
+    "model.gguf": {
+      "bytes": 672003680,
+      "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d"
+    },
+    "mmproj.gguf": {
+      "bytes": 1110117984,
+      "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900"
+    }
+  },
+  "elf_load_alignments": {
+    "lib/arm64-v8a/libc++_shared.so": 16384,
+    "lib/arm64-v8a/libggml-base.so": 16384,
+    "lib/arm64-v8a/libggml-cpu-android_armv8.0_1.so": 16384,
+    "lib/arm64-v8a/libggml-cpu-android_armv8.2_1.so": 16384,
+    "lib/arm64-v8a/libggml-cpu-android_armv8.2_2.so": 16384,
+    "lib/arm64-v8a/libggml-cpu-android_armv8.6_1.so": 16384,
+    "lib/arm64-v8a/libggml-vulkan.so": 16384,
+    "lib/arm64-v8a/libggml.so": 16384,
+    "lib/arm64-v8a/libgiljabi_native.so": 16384,
+    "lib/arm64-v8a/libllama-common.so": 16384,
+    "lib/arm64-v8a/libllama.so": 16384,
+    "lib/arm64-v8a/libmtmd.so": 16384,
+    "lib/arm64-v8a/libonnxruntime.so": 16384,
+    "lib/arm64-v8a/libonnxruntime4j_jni.so": 16384,
+    "lib/arm64-v8a/libtranslate_jni.so": 16384
+  },
+  "native_dependencies": {
+    "libggml-vulkan.so": [
+      "libggml-base.so",
+      "libvulkan.so",
+      "libm.so",
+      "libc++_shared.so",
+      "libdl.so",
+      "libc.so"
+    ],
+    "libggml.so": [
+      "libggml-base.so",
+      "libm.so",
+      "libc++_shared.so",
+      "libdl.so",
+      "libc.so"
+    ],
+    "libgiljabi_native.so": [
+      "libllama-common.so",
+      "libmtmd.so",
+      "libandroid.so",
+      "liblog.so",
+      "libllama.so",
+      "libggml.so",
+      "libggml-base.so",
+      "libm.so",
+      "libc++_shared.so",
+      "libdl.so",
+      "libc.so"
+    ]
+  },
+  "checks": {
+    "tests": 202,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint_errors": 0
+  },
+  "native_checks": {
+    "template_failure_reproduced": true,
+    "complete_turn_rendering_passed": true,
+    "jni_exception_guard_passed": true
+  },
+  "guidance_checks": {
+    "host_only": true,
+    "physical_phone_latency_verified": false,
+    "production_jni_used": true,
+    "shared_walking_prompt_parser_used": true,
+    "guidance_protocol_passed": true,
+    "fixture": "public engine landscape 1.jpg",
+    "scenery_alert_suppressed": true,
+    "guidance_reply": "{\"speak\":true,\"message\":\"A rocky outcrop in the foreground blocks the view of the valley.\",\"urgency\":\"notice\"}",
+    "english_caption": "A rugged mountain viewpoint frames a winding river and steep valleys, with snow-dusted peaks under a bright sky.",
+    "host_phase_seconds": "prepare=1.449 image=13.642 generation=1.022",
+    "host_caption_seconds": "13.328"
+  },
+  "camera_android15_smoke_passed": true,
+  "physical_phone_latency_measured": false,
+  "full_vlm_under_2_seconds_verified": false,
+  "local_tts": "Android Korean TTS only",
+  "gemini_tts": "ElevenLabs first, Android Korean TTS fallback",
+  "camera_job": 124900728926,
+  "full_build_job": 124901747506,
+  "validated_at_seoul": "2026-11-02",
+  "live_gemini_comparison": {
+    "status": 200,
+    "valid_guidance_json": true,
+    "speak": false,
+    "urgency": "none",
+    "seconds": 2.45,
+    "thinking_level": "MINIMAL",
+    "usage": {
+      "promptTokenCount": 2963,
+      "candidatesTokenCount": 12,
+      "totalTokenCount": 2975,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 803
+        },
+        {
+          "modality": "IMAGE",
+          "tokenCount": 2160
+        }
+      ],
+      "serviceTier": "standard"
+    },
+    "finish": "STOP",
+    "scope": "Host request with repeated public landscape frames; not phone latency or obstacle accuracy."
+  },
+  "speech_validation_scope": "Unit checks and routing review. ElevenLabs fixed female/male HTTP 200 and MP3 decode were verified for 0.7.0 with the same client request and model; physical-phone playback remains unverified.",
+  "physical_phone_gpu_speed_verified": false,
+  "distance_or_walking_heading_measured": false,
+  "korean_translation_phone_runtime_verified": false
+}

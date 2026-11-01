@@ -1,6 +1,20 @@
 # 길잡이 테스트 APK
 
-## 최신 · 변화 안내 / 로컬 가속 / ElevenLabs · 0.7.0-full
+## 최신 · 보행 상황 판단 / 이미지 GPU / 한국어 / 음성 대체 · 0.8.2-full
+
+**[giljabi-0.8.2-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.8.2-full/giljabi-0.8.2-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.8.2-full)
+
+- YOLO ‘화면 어디 감지’ 음성을 제거했습니다. Gemini는 이전·최신 사진을 계속 분석하되 같은 상황이면 말하지 않고, 보행에 필요한 새 방해물·분명한 악화가 있을 때 짧게 안내합니다. 지팡이 스윙·잠깐의 감지 소실·개수 변동으로 반복하는 것을 억제합니다.
+- **로컬 AI는 기본 한국어 TTS만 사용합니다.** Gemini는 기존 ElevenLabs 여자/남자 음성 우선이며 오류·지연에는 기본 TTS로 대체합니다. 중지·지난 상황에는 대체 음성도 내지 않습니다.
+- 로컬 비전 인코더에 선택형 Vulkan GPU와 CPU 대체를 추가했습니다. 긴 한국어 지시를 따라 쓰던 경로는 짧은 영어 분석·기기 내 한국어 번역과 JSON 문법 제약으로 바꿨습니다. 앱에서 **오프라인 한국어 번역 준비 · 최초 인터넷**을 한 번 눌러 주세요.
+- **휴대폰에서 2초 이하 달성은 아직 미측정**입니다. 5초가 지난 사진의 새 보행 음성은 읽지 않습니다. 카메라만으로 실제 2~3m·진행 방향·머리 높이를 측정하지 않으며 모든 위험 탐지를 보장하지 않습니다.
+- ESP·휴대폰 후면/전면·수동 사진·BLE·백그라운드·내장 모델을 유지한 ARM64 APK입니다. 파일 1,826,247,214바이트, 약 1.83GB. 여유 공간 6GB 이상을 권장합니다.
+- **공개 0.7.0과 서명이 달라 기존 앱을 삭제한 후 설치해야 합니다. 삭제하면 키·설정·준비된 모델이 초기화됩니다.**
+- 단위 검사 **202개**, lint 오류 0, Android 15 카메라·화면 밖 실행, 실제 GGUF 네이티브 JSON·영어 설명 검사 통과. 공개 APK를 다시 받아 모델 해시·v2 서명·16KB 정렬·GPU/CPU 라이브러리를 확인했습니다.
+
+[사용법·검증 범위](../android/WALKING_GUIDANCE.md) · [검증 데이터](../android/WALKING_GUIDANCE_VALIDATION.json). SHA-256: `19b231c8b7fa3bb875160bbc5238168e69ba2a064fdb1fd96ad71a03b255f99c`.
+
+## 이전 · 변화 안내 / 로컬 가속 / ElevenLabs · 0.7.0-full
 
 **[giljabi-0.7.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.7.0-full/giljabi-0.7.0-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.7.0-full)
 
