@@ -27,3 +27,19 @@
 호스트 3회 실제 사진 검사 전체 시간 약 33.37초, 최대 RSS 약 2.23GiB는 개발 환경 측정이며 삼성 휴대폰의 속도·메모리 측정이 아닙니다. 호스트 JNI 검사에는 Android log 출력만 대체하는 테스트용 shim을 사용했고 템플릿·모델·JNI 본문은 생산 코드를 사용했습니다. 실제 사용자 사진·API 키는 사용하지 않았습니다.
 
 재현 도구는 `android/native-tests/`에 있습니다. 공개 APK 작업에도 실제 GGUF 템플릿 회귀 검사와 실제 JNI 예외 변환 검사를 추가해 성공한 경우에만 배포하도록 합니다. Android 기기의 지속 실행·램·네트워크·음성·BLE 검증은 별도입니다. [API 키 입력과 상세 로그 개선](KEY_AND_TRACE.md)도 이번 버전에 포함합니다.
+
+## 공개 배포 검증
+
+[GitHub Actions 41294030711](https://github.com/Siroko-0516/new_orphan/actions/runs/41294030711), 태그 `android-v0.5.3-full`, 소스 `b455909`에서 실제 모델 네이티브 회귀 검사와 Android full 빌드·테스트·Lint·공개 업로드가 성공했습니다.
+
+- [JVM·Lint 검사 보고서](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.3-full/checks.json): **86개 통과**, 실패·오류·건너뜀 0, Lint 오류 0.
+- [실제 모델/JNI 검사 보고서](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.3-full/native-checks.json): 이전 템플릿 오류 재현, 전체 대화 렌더링 수정, JNI 예외 변환 모두 통과.
+- 공개 URL에서 APK를 다시 내려받아 검증: 버전 `0.5.3-full`, versionCode 9, 크기 `1805309944` bytes.
+- 배포 SHA-256: `716051ba7f4a4cdaaf0afc2fb8987e028a9a11200392482b015be327023dfc79`. 게시된 체크섬과 일치.
+- 서명 인증서 SHA-256: `5ca33fae19d3f485cd627fab51899eb36412785ea925458a5c90b1172516d842`.
+- v2 서명·16KB ZIP 정렬, ARM64 라이브러리 전체 PT_LOAD 정렬 16KB 이상 확인.
+- 내장 언어·비전 가중치의 크기·해시·무압축 저장 일치, YOLO ONNX 해시 유지. Java의 `prefillTurn`과 최종 JNI 라이브러리의 해당 함수 심벌 포함 확인.
+
+이번 APK는 이전 공개 0.5.1과 서명이 다릅니다. 기존 길잡이 삭제 후 설치해야 하며 앱 설정·저장된 API 키·모델 복사본이 삭제됩니다. 모델은 APK 안에 있어 첫 준비에서 다시 복사합니다. 디버그 키 캐시만으로 태그 간 같은 서명을 보장하지 않습니다.
+
+[0.5.3 APK 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.3-full/giljabi-0.5.3-full-debug.apk). 실제 사용자 휴대폰에서의 해결 여부와 지속 동작은 설치 후 확인해야 합니다.

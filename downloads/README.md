@@ -1,5 +1,22 @@
 # 길잡이 테스트 APK
 
+## 최신 · 로컬 AI 종료 원인 수정 / 키 입력 개선 · 0.5.3-full
+
+**[giljabi-0.5.3-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.3-full/giljabi-0.5.3-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.5.3-full)
+
+상세 호출 기록으로 확인한 MiniCPM 템플릿 오류를 수정했습니다. 자동 분석 중 시스템 문장만 먼저 렌더링해 `Unable to generate parser for this template` C++ 예외가 발생했고, 잡히지 않은 예외가 앱을 SIGABRT로 종료했습니다. 이제 시스템·사진·질문을 한 대화로 렌더링하고 불필요한 응답 파서 생성을 사용하지 않습니다. JNI 예외도 Java로 전달합니다.
+
+API 키 붙여넣기 정리와 이유별 입력 오류 표시도 포함합니다. 공백·줄바꿈·보이지 않는 서식 문자를 정리하고 마스킹된 키·설정 코드·길이·문자 문제를 구분합니다. 저장 자체가 Google 인증 성공을 의미하지 않으며 실제 요청에서 확인합니다. 키를 채팅으로 보내지 마세요.
+
+- Android 8 이상 ARM64, 실제 로컬 모델 두 파일을 포함한 약 **1.8GB** APK입니다. 설치·첫 준비를 위해 내부 여유 공간 6GB 이상을 권장합니다.
+- 이번 APK는 이전 공개 0.5.1과 서명이 달라 기존 앱 삭제 후 설치해야 합니다. 삭제하면 설정·API 키·모델 복사본도 삭제되고, 내장 모델은 첫 사용 시 다시 준비합니다.
+- ESP Wi-Fi 연결 → 앱에서 `http://192.168.4.1:81/stream` 사용. 자동 분석·백그라운드는 **실시간 AI + 백그라운드 시작**, 중지는 앱 또는 실행 알림에서 합니다.
+- 로컬은 인터넷 없이, Gemini는 개인 키와 인터넷 연결로 실행합니다. Gemini 자동 실행 중에는 사진을 반복 전송하며 데이터·API 요금이 발생할 수 있습니다.
+- 실제 GGUF로 이전 오류 재현·수정 경로 검사, JNI 예외 변환 검사를 통과했습니다. 개발 서버에서 생산 JNI와 실제 모델 두 파일로 사진 설명을 3회 생성하고 정상 종료했습니다. 실제 Android 기기의 장시간 실행·속도·메모리는 별도 확인이 필요합니다.
+- **ESP 수신 15초 타임아웃은 별도 연결 문제**이며 이 템플릿 수정으로 무선 통신까지 해결됐다는 뜻은 아닙니다. 남는 오류는 **앱 오류 기록 보기 · 복사**로 확인합니다. Android 12 이상은 시스템이 제공한 네이티브 abort 메시지·호출 기록도 읽습니다.
+
+[확인된 원인·수정·실제 모델 검사](../android/NATIVE_TEMPLATE_FIX.md) · [API 키 입력·상세 기록](../android/KEY_AND_TRACE.md) · [자동 실행 안내](../android/BACKGROUND.md).
+
 ## 앱이 네이티브 오류로 종료될 때 · PC 로그 수집
 
 앱의 종료 요약이 `네이티브 오류 종료`와 status 6(SIGABRT)을 표시하면 `Abort message`와 backtrace가 추가로 필요합니다. 앱의 마지막 저장 단계만으로 JPEG·YOLO·화면 렌더러 중 어느 코드가 중단됐는지 확정하지 않습니다.
@@ -9,7 +26,7 @@
 
 공식 platform-tools를 압축 해제하고 도구의 CMD 파일을 adb.exe 옆에 복사합니다. 휴대폰 USB 디버깅을 켜고 연결·허용한 뒤 CMD를 실행하면 길잡이의 마지막 네이티브 충돌에서 메시지와 호출 스택을 추려 `giljabi-native.txt`에 저장합니다. 현재 설치와 로그를 그대로 유지하며 앱 데이터나 로그 버퍼를 지우지 않습니다. 기록은 자동 전송하지 않습니다. 원본 `giljabi-crash-local.txt`에는 다른 앱의 기록도 있을 수 있어 전체를 공유하지 마세요. 실제 Windows와 휴대폰에서 이 도구 실행은 아직 검증하지 못했습니다.
 
-## 최신 · ESP 영상 종료 오류 대응 · 0.5.1-full
+## 이전 · ESP 영상 종료 오류 대응 · 0.5.1-full
 
 **[giljabi-0.5.1-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.1-full/giljabi-0.5.1-full-debug.apk)** · [릴리스와 SHA-256](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.5.1-full)
 
