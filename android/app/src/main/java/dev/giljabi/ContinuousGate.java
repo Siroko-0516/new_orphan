@@ -22,5 +22,6 @@ final class ContinuousGate {
     synchronized boolean finish(Ticket ticket){boolean accept=current(ticket);if(inFlight==ticket)inFlight=null;return accept;}
     synchronized void defer(Ticket ticket,long until){if(current(ticket))nextStart=Math.max(nextStart,until);}
     synchronized void pause(Ticket ticket){if(current(ticket))paused=true;}
+    synchronized boolean idle(){return inFlight==null;}
     synchronized boolean isPaused(){return paused;}
 }

@@ -24,7 +24,7 @@ final class CloudNetwork {
     static Lease connect(Context context,BooleanSupplier cancelled) throws IOException {
         ConnectivityManager manager=context.getSystemService(ConnectivityManager.class);
         if(manager==null)throw new IOException("휴대폰 인터넷 상태를 읽지 못했습니다.");
-        if(cancelled.getAsBoolean())throw new IOException("Gemini 연결을 중지했습니다.");
+        if(cancelled.getAsBoolean())throw new IOException("클라우드 연결을 중지했습니다.");
         Network active=manager.getActiveNetwork();NetworkCapabilities activeCaps=active==null?null:manager.getNetworkCapabilities(active);
         // Keep an active VPN's policy; do not route around it via an underlying cellular network.
         if(activeCaps!=null&&activeCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)){
@@ -45,10 +45,10 @@ final class CloudNetwork {
         try{
             manager.requestNetwork(new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),callback,12000);registered=true;
             long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(14);
-            while(System.nanoTime()<end){if(cancelled.getAsBoolean())throw new IOException("Gemini 연결을 중지했습니다.");if(ready.await(100,TimeUnit.MILLISECONDS))break;}
-            Network network=chosen.get();if(network==null)throw new IOException("인터넷 연결이 없습니다. ESP Wi-Fi를 쓰면서 Gemini도 사용하려면 휴대폰 모바일 데이터를 켜세요. 연결이 없으면 로컬 AI를 선택할 수 있습니다.");
+            while(System.nanoTime()<end){if(cancelled.getAsBoolean())throw new IOException("클라우드 연결을 중지했습니다.");if(ready.await(100,TimeUnit.MILLISECONDS))break;}
+            Network network=chosen.get();if(network==null)throw new IOException("인터넷 연결이 없습니다. ESP Wi-Fi를 쓰면서 클라우드 AI·음성도 사용하려면 휴대폰 모바일 데이터를 켜세요. 연결이 없으면 로컬 AI를 선택할 수 있습니다.");
             handedOff=true;return new Lease(manager,network,callback,"모바일 데이터");
-        }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IOException("Gemini 연결을 중지했습니다.",e);}
+        }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IOException("클라우드 연결을 중지했습니다.",e);}
         catch(SecurityException e){throw new IOException("인터넷 연결을 사용할 수 없습니다. 휴대폰 네트워크 설정을 확인하세요.",e);}
         finally{if(registered&&!handedOff)try{manager.unregisterNetworkCallback(callback);}catch(IllegalArgumentException ignored){}}
     }

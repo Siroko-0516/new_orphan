@@ -79,6 +79,11 @@ final class YoloDetector implements AutoCloseable {
         for(Box candidate:candidates){boolean duplicate=false;for(Box b:kept)if(b.label==candidate.label&&iou(b.xy,candidate.xy)>.45f){duplicate=true;break;}if(!duplicate)kept.add(candidate);if(kept.size()==20)break;}
         return kept;
     }
+    static String brief(List<Box> boxes){
+        StringBuilder text=new StringBuilder();int count=0;
+        for(Box box:boxes){if(box.score<.65f||area(box.xy)<.01f)continue;if(count++==3)break;if(text.length()>0)text.append("; ");float center=(box.xy[0]+box.xy[2])/2;text.append(LABELS[box.label]).append(center<.33f?" left":center>.67f?" right":" center");}
+        return text.length()==0?"none confidently detected":text.toString();
+    }
     static float clamp(float n){return Math.max(0,Math.min(1,n));}
     static float area(float[] a){return Math.max(0,a[2]-a[0])*Math.max(0,a[3]-a[1]);}
     static float iou(float[] a,float[] b){float intersection=area(new float[]{Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.min(a[2],b[2]),Math.min(a[3],b[3])});float union=area(a)+area(b)-intersection;return union>0?intersection/union:0;}

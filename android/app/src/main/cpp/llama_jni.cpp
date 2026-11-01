@@ -175,6 +175,7 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
     mtmd_context_params mparams = mtmd_context_params_default();
     mparams.use_gpu   = false;
     mparams.print_timings = false;
+    mparams.warmup = false; // Encode the first real image rather than a discarded dummy image.
 
     g_image_max_slice_nums       = (jint) jimage_max_slice_nums;
     mparams.image_max_slice_nums = g_image_max_slice_nums;

@@ -3,6 +3,7 @@ package com.example.minicpm_v_demo;
 /** JNI names match the MIT-licensed official MiniCPM bridge. Calls must be serialized. */
 public final class LlamaEngine {
     static { System.loadLibrary("giljabi_native"); }
+    public native String systemInfo();
     public native void init(String nativeLibraryDir);
     public native int load(String modelPath);
     public native int loadMmproj(String path, int imageMaxSlices);

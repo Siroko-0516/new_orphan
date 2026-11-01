@@ -13,16 +13,17 @@ import javax.crypto.spec.GCMParameterSpec;
 
 /** Personal API key is encrypted with an app-owned Android Keystore key, never a build secret. */
 final class ApiKeyStore {
-    private static final String ALIAS="giljabi_gemini_aes_v1",ENTRY="gemini_key_ciphertext";
+    private final String ALIAS,ENTRY,provider;
     private final SharedPreferences preferences;
-    ApiKeyStore(Context context){preferences=context.getSharedPreferences("cloud-key",Context.MODE_PRIVATE);}
+    ApiKeyStore(Context context){this(context,false);}
+    ApiKeyStore(Context context,boolean eleven){ALIAS=eleven?"giljabi_eleven_aes_v1":"giljabi_gemini_aes_v1";ENTRY=eleven?"eleven_key_ciphertext":"gemini_key_ciphertext";provider=eleven?"ElevenLabs":"Gemini";preferences=context.getSharedPreferences("cloud-key",Context.MODE_PRIVATE);}
     boolean hasKey(){return preferences.contains(ENTRY);}
     void save(String value) throws IOException {
         try{if(!preferences.edit().putString(ENTRY,encrypt(value,key())).commit())throw new IOException("API 키 저장에 실패했습니다.");}
         catch(GeneralSecurityException e){throw new IOException("API 키를 안전하게 저장하지 못했습니다.",e);}
     }
     String read() throws IOException {
-        String value=preferences.getString(ENTRY,"");if(value.isEmpty())throw new IOException("Gemini 설정에서 개인 API 키를 입력하세요.");
+        String value=preferences.getString(ENTRY,"");if(value.isEmpty())throw new IOException(provider+" 설정에서 개인 API 키를 입력하세요.");
         try{return decrypt(value,key());}catch(GeneralSecurityException|IllegalArgumentException e){throw new IOException("저장된 API 키를 읽지 못했습니다. 키를 삭제하고 다시 입력하세요.",e);}
     }
     void clear() throws IOException {if(!preferences.edit().remove(ENTRY).commit())throw new IOException("API 키 삭제에 실패했습니다.");}

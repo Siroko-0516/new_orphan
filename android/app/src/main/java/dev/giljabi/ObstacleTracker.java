@@ -5,6 +5,9 @@ import java.util.*;
 /** Heuristic new-object events, never a measurement of distance or collision risk. */
 final class ObstacleTracker {
     private static final long LOST_MS=3000, COOLDOWN_MS=2000;
+    private final boolean batch;
+    ObstacleTracker(){this(false);}
+    ObstacleTracker(boolean batch){this.batch=batch;}
     private final List<Track> tracks=new ArrayList<>();
     private long frame,lastSent=-COOLDOWN_MS;
     private static final class Track {
@@ -23,7 +26,7 @@ final class ObstacleTracker {
             match.box=box;match.seen=now;match.lastFrame=frame;used.add(match);
         }
         if(now-lastSent<COOLDOWN_MS)return null;
-        for(Track t:tracks)if(t.lastFrame==frame&&t.consecutive>=3&&!t.reported){t.reported=true;lastSent=now;return t.box;}
+        for(Track t:tracks)if(t.lastFrame==frame&&t.consecutive>=3&&!t.reported){t.reported=true;if(batch)for(Track other:tracks)if(other.lastFrame==frame&&other.consecutive>=3)other.reported=true;lastSent=now;return t.box;}
         return null;
     }
     private static boolean candidate(YoloDetector.Box b){

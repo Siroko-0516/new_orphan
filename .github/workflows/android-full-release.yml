@@ -145,11 +145,15 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import hashlib, json, shutil
+          import hashlib, json, shutil, zipfile
           metadata=json.loads(Path('android/app/build/outputs/apk/debug/output-metadata.json').read_text())
           version=metadata['elements'][0]['versionName']
           if not version.endswith('-full'):
               raise SystemExit('Refusing to publish a lite build as the bundled app')
+          with zipfile.ZipFile('android/app/build/outputs/apk/debug/app-debug.apk') as apk:
+              for variant in ['android_armv8.0_1','android_armv8.2_1','android_armv8.2_2','android_armv8.6_1']:
+                  assert 'lib/arm64-v8a/libggml-cpu-'+variant+'.so' in apk.namelist(), 'Missing runtime CPU backend: '+variant
+              assert 'assets/licenses/kleidiai.txt' in apk.namelist()
           folder=Path('release-apk');folder.mkdir(exist_ok=True)
           shutil.copyfile('build-validation.json',folder/'checks.json')
           shutil.copyfile('native-validation.json',folder/'native-checks.json')
@@ -171,7 +175,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · 휴대폰 카메라 / ESP / 자동 AI' --notes-file android/FULL_RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · 변화 안내 / 로컬 가속 / ElevenLabs' --notes-file android/FULL_RELEASE_NOTES.md
   release-notes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04

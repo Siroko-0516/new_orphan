@@ -2,6 +2,7 @@ package dev.giljabi;
 
 import android.content.Context;
 import android.os.StatFs;
+import android.os.SystemClock;
 import com.example.minicpm_v_demo.LlamaEngine;
 import java.io.*;
 import java.util.concurrent.CancellationException;
@@ -18,6 +19,8 @@ final class LocalVlm {
     private LlamaEngine engine;
     private boolean initialized;
     private volatile boolean loaded;
+    private volatile String timings="";
+    String timings(){return timings;}
     private LocalVlm(Context context){
         this.context=context;File model=new File(context.getFilesDir(),"model.gguf"),vision=new File(context.getFilesDir(),"mmproj.gguf");BundledModels bundled=null;String error=null;
         if(BuildConfig.BUNDLED_AI)try{
@@ -39,17 +42,18 @@ final class LocalVlm {
         progress.accept("로컬 모델 불러오는 중...");
         if(engine==null)engine=new LlamaEngine();if(!initialized){engine.init(context.getApplicationInfo().nativeLibraryDir);initialized=true;}
         try{
-            require(engine.load(modelFile.getAbsolutePath()),"언어 모델 로딩");check(cancelled);
-            require(engine.loadMmproj(visionFile.getAbsolutePath(),1),"비전 모델 로딩");check(cancelled);
-            engine.setMinicpmvVersionNative(0);engine.setEnableThinkingNative(false);require(engine.prepare(),"추론 준비");loaded=true;
+            progress.accept("로컬 언어 모델 불러오는 중...");require(engine.load(modelFile.getAbsolutePath()),"언어 모델 로딩");check(cancelled);
+            progress.accept("로컬 비전 모델 불러오는 중...");require(engine.loadMmproj(visionFile.getAbsolutePath(),1),"비전 모델 로딩");check(cancelled);
+            progress.accept("로컬 AI 연산 준비 중...");engine.setMinicpmvVersionNative(0);engine.setEnableThinkingNative(false);require(engine.prepare(),"추론 준비");loaded=true;CrashDiagnostics.checkpoint("로컬 AI CPU 기능: "+engine.systemInfo());
         }catch(Throwable failure){engine.unload();loaded=false;throw failure;}
     }
     synchronized String describe(byte[] jpeg,String question,BooleanSupplier cancelled,Consumer<String> progress,Consumer<String> partial)throws Exception {
-        prepare(cancelled,progress);check(cancelled);engine.fullReset();check(cancelled);
-        require(engine.prefillTurn("Describe only visible evidence. Do not invent objects, motion, distance, or safety guarantees. If uncertain, say so.",question,jpeg,jpeg.length,192),"이미지·질문 처리");check(cancelled);
+        long started=SystemClock.elapsedRealtime();prepare(cancelled,progress);check(cancelled);long prepared=SystemClock.elapsedRealtime();engine.fullReset();check(cancelled);progress.accept("로컬 AI 이미지 분석 중 · 첫 문장 준비");
+        require(engine.prefillTurn("Describe only visible evidence. Do not invent objects, motion, distance, or safety guarantees. If the image is unclear or uniform, say you cannot confirm. Never invent steps or curbs. Never give general walking advice or make claims about white cane capabilities.",question+"\nUse at most two short sentences.",jpeg,jpeg.length,96),"이미지·질문 처리");check(cancelled);
+        long prefilled=SystemClock.elapsedRealtime();progress.accept("로컬 AI 설명 생성 중...");
         StringBuilder answer=new StringBuilder();
-        for(int i=0;i<384;i++){check(cancelled);String token=engine.generateNextToken();if(token==null)break;answer.append(token);partial.accept(answer.toString());}
-        check(cancelled);String value=answer.toString().replaceAll("(?s)<think>.*?</think>","").trim();if(value.isEmpty())throw new IOException("빈 답변입니다. 질문 또는 모델 파일을 확인하세요.");return value;
+        for(int i=0;i<96;i++){check(cancelled);String token=engine.generateNextToken();if(token==null)break;answer.append(token);String visible=LocalReply.clean(answer.toString());if(!visible.isEmpty())partial.accept(visible);if(LocalReply.complete(visible))break;}
+        check(cancelled);String value=LocalReply.clean(answer.toString());timings=String.format(java.util.Locale.ROOT,"준비 %.1f초 · 이미지 %.1f초 · 생성 %.1f초",(prepared-started)/1000.0,(prefilled-prepared)/1000.0,(SystemClock.elapsedRealtime()-prefilled)/1000.0);if(value.isEmpty())throw new IOException("빈 답변입니다. 질문 또는 모델 파일을 확인하세요.");return value;
     }
     synchronized void release(){if(engine!=null&&loaded){engine.unload();loaded=false;}}
     private void require(int code,String action)throws IOException {if(code!=0)throw new IOException(action+" 실패 ("+code+"). 모델 조합과 메모리를 확인하세요.");}

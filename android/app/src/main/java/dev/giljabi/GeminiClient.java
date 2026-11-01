@@ -25,7 +25,7 @@ final class GeminiClient {
         try{
             JSONArray parts=new JSONArray().put(new JSONObject().put("inlineData",new JSONObject().put("mimeType","image/jpeg").put("data",Base64.getEncoder().encodeToString(jpeg)))).put(new JSONObject().put("text",question));
             JSONObject body=new JSONObject()
-                .put("systemInstruction",new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text","Describe only visible evidence in the language requested by the user. Do not invent objects, distance, motion, or collision risk. If uncertain, say so. YOLO observations may be wrong."))))
+                .put("systemInstruction",new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text","Describe only visible evidence in the language requested by the user. Do not invent objects, distance, motion, or collision risk. If the image is unclear or uniform, say you cannot confirm. Do not invent steps or curbs or give general walking advice or claims about white cane capabilities. YOLO observations may be wrong."))))
                 .put("contents",new JSONArray().put(new JSONObject().put("role","user").put("parts",parts)))
                 .put("generationConfig",new JSONObject().put("temperature",0.1).put("maxOutputTokens",768));
             return body.toString().getBytes(StandardCharsets.UTF_8);

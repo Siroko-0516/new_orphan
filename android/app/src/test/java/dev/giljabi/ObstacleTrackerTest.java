@@ -26,6 +26,11 @@ public class ObstacleTrackerTest {
         List<YoloDetector.Box> ignored=Arrays.asList(new YoloDetector.Box(0,.5f,person().xy),new YoloDetector.Box(0,.99f,new float[]{.4f,.5f,.41f,.51f}),new YoloDetector.Box(0,.99f,new float[]{.2f,0,.8f,.3f}));
         for(int i=0;i<20;i++)assertNull(tracker.update(ignored,i*250));
     }
+    @Test public void speechBatchDoesNotReadEveryObjectInTheSameScene(){
+        ObstacleTracker tracker=new ObstacleTracker(true);List<YoloDetector.Box> both=Arrays.asList(person(),new YoloDetector.Box(2,.9f,new float[]{.15f,.5f,.35f,.9f}));
+        tracker.update(both,0);tracker.update(both,250);assertNotNull(tracker.update(both,500));
+        for(int i=3;i<20;i++)assertNull(tracker.update(both,i*250));
+    }
     @Test public void resetRequiresFreshEvidenceAfterReconnect(){
         ObstacleTracker tracker=new ObstacleTracker();tracker.update(one(),0);tracker.update(one(),250);tracker.update(one(),500);tracker.reset();
         assertNull(tracker.update(one(),750));assertNull(tracker.update(one(),1000));assertNotNull(tracker.update(one(),1250));

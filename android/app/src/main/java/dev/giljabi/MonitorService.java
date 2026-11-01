@@ -26,8 +26,9 @@ public final class MonitorService extends Service {
     private static final class ConfigurationException extends IOException {ConfigurationException(IOException cause){super(cause.getMessage(),cause);}}
     interface Observer {void state(Snapshot snapshot);void frame(ViewFrame frame);}
     static final class Snapshot {
-        final boolean active,stopping,paused,bleReady;final MonitorConfig config;final String status,result,bleStatus;
-        Snapshot(boolean active,boolean stopping,boolean paused,boolean bleReady,MonitorConfig config,String status,String result,String bleStatus){this.active=active;this.stopping=stopping;this.paused=paused;this.bleReady=bleReady;this.config=config;this.status=status;this.result=result;this.bleStatus=bleStatus;}
+        final boolean active,stopping,paused,bleReady;final MonitorConfig config;final String status,result,bleStatus,speechStatus;
+        Snapshot(boolean active,boolean stopping,boolean paused,boolean bleReady,MonitorConfig config,String status,String result,String bleStatus){this(active,stopping,paused,bleReady,config,status,result,bleStatus,"");}
+        Snapshot(boolean active,boolean stopping,boolean paused,boolean bleReady,MonitorConfig config,String status,String result,String bleStatus,String speechStatus){this.speechStatus=speechStatus;this.active=active;this.stopping=stopping;this.paused=paused;this.bleReady=bleReady;this.config=config;this.status=status;this.result=result;this.bleStatus=bleStatus;}
     }
     static final class ViewFrame {
         final Bitmap bitmap;final byte[] jpeg;final List<YoloDetector.Box> boxes;final double fps;final long detectionMs;
@@ -51,12 +52,13 @@ public final class MonitorService extends Service {
     static void test(Context context){if(active()&&!last.stopping)context.startService(new Intent(context,MonitorService.class).setAction(TEST));}
 
     private static final class FramePacket {
-        final Bitmap bitmap;final byte[] jpeg;final List<YoloDetector.Box> boxes;final long sequence,receivedAt,detectionMs;final double fps;
-        FramePacket(LiveCamera.Frame frame,long sequence,long receivedAt){bitmap=frame.bitmap;jpeg=frame.jpeg;boxes=frame.boxes;this.sequence=sequence;this.receivedAt=receivedAt;detectionMs=frame.detectionMs;fps=frame.receiveFps;}
+        final Bitmap bitmap;final byte[] jpeg;final List<YoloDetector.Box> boxes;final long sequence,receivedAt,detectionMs;final double fps;final SceneSignature signature;
+        FramePacket(LiveCamera.Frame frame,long sequence,long receivedAt){signature=frame.detectionMs>=0?ImageEvidence.sample(frame.bitmap):null;bitmap=frame.bitmap;jpeg=frame.jpeg;boxes=frame.boxes;this.sequence=sequence;this.receivedAt=receivedAt;detectionMs=frame.detectionMs;fps=frame.receiveFps;}
     }
     private final Handler main=new Handler(Looper.getMainLooper());
-    private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor(task->new Thread(()->{android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);task.run();},"scene-ai"));
     private final ContinuousGate gate=new ContinuousGate();
+    private final SceneChangeGate sceneChanges=new SceneChangeGate();
     private final Object modeLock=new Object(),frameLock=new Object();
     private final AtomicLong sequence=new AtomicLong();
     private final AtomicBoolean framePosted=new AtomicBoolean();
@@ -68,18 +70,20 @@ public final class MonitorService extends Service {
     private ScheduledFuture<?> repeat;
     private VideoSource camera;
     private BleLink ble;
-    private final ObstacleTracker tracker=new ObstacleTracker();
+    private final ObstacleTracker tracker=new ObstacleTracker(),fastTracker=new ObstacleTracker(true);
+    private ElevenSpeech eleven;
     private TextToSpeech tts;private boolean ttsReady,cleanupQueued,cleanupComplete,destroyed,foreground;
     private PowerManager.WakeLock wake;
     private WifiManager.WifiLock wifiLock;
     private String status="실시간 AI 시작 중...",result="",bleStatus="BLE 미연결",lastSpoken="",terminalError="";
+    private String speechStatus="";
     private long lastNotice,lastTrackedSequence=-1;
     private final Runnable reconnect=()->openCamera();
     private final Runnable renew=new Runnable(){@Override public void run(){if(monitoring&&!stopping){if(wake!=null)wake.acquire(TimeUnit.MINUTES.toMillis(30));main.postDelayed(this,TimeUnit.MINUTES.toMillis(10));}}};
     private final Runnable reconnectBle=new Runnable(){@Override public void run(){if(monitoring&&!stopping){connectBle();main.postDelayed(this,10000);}}};
 
     @Override public void onCreate(){
-        super.onCreate();instance=this;
+        super.onCreate();instance=this;eleven=new ElevenSpeech(this,message->{if(monitoring&&!stopping){speechStatus=message;publish();}});
         NotificationManager notifications=getSystemService(NotificationManager.class);if(notifications!=null)notifications.createNotificationChannel(new NotificationChannel(CHANNEL,"길잡이 실시간 분석",NotificationManager.IMPORTANCE_LOW));
         ble=new BleLink(this,message->{bleStatus=message;publish();},devices->{},()->{tracker.reset();publish();});
     }
@@ -87,20 +91,20 @@ public final class MonitorService extends Service {
         String action=intent==null?STOP:intent.getAction();
         if(STOP.equals(action)){if(!monitoring&&!stopping&&config==null){cleanupQueued=true;cleanupComplete=true;worker.shutdown();stopSelf();}else stopMonitoring();return START_NOT_STICKY;}
         if(TEST.equals(action)){if(monitoring&&!stopping)ble.send("TEST\n");return START_NOT_STICKY;}
-        if(RETRY.equals(action)){if(monitoring&&!stopping){synchronized(modeLock){gate.reset();}closeRequest();status="장면 설명 재시작 대기 중...";publish();}return START_NOT_STICKY;}
+        if(RETRY.equals(action)){if(monitoring&&!stopping){synchronized(modeLock){gate.reset();sceneChanges.reset();}closeRequest();status="장면 설명 재시작 대기 중...";publish();}return START_NOT_STICKY;}
         try{
             MonitorConfig next=MonitorConfig.read(intent);next.validate();
             if(UPDATE.equals(action)&&monitoring&&!stopping){
                 if(next.source!=config.source||!next.address.equals(config.address))throw new IOException("영상 입력을 바꾸려면 먼저 실시간 실행을 중지하세요.");
-                synchronized(modeLock){config=next;gate.reset();}closeRequest();if(tts!=null)tts.stop();lastSpoken="";result="";status=(next.cloud?"Gemini":"로컬 AI")+"로 전환 중 · 이전 분석 처리 후 최신 프레임을 사용합니다.";publish();return START_NOT_STICKY;
+                synchronized(modeLock){config=next;gate.reset();sceneChanges.reset();}closeRequest();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();lastSpoken="";result="";status=(next.cloud?"Gemini":"로컬 AI")+"로 전환 중 · 이전 분석 처리 후 최신 프레임을 사용합니다.";publish();return START_NOT_STICKY;
             }
             if(!START.equals(action)||monitoring||stopping||cleanupQueued)return START_NOT_STICKY;
             config=next;
             int types=Build.VERSION.SDK_INT>=29?ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK:0;
             if(Build.VERSION.SDK_INT>=29&&(next.source==CameraSource.ESP||!next.bleAddress.isEmpty()))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
             if(Build.VERSION.SDK_INT>=30&&CameraSource.phone(next.source))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
-            ServiceCompat.startForeground(this,NOTIFICATION,notification(),types);foreground=true;monitoring=true;gate.start();acquireLocks();
-            tts=new TextToSpeech(getApplicationContext(),code->{ttsReady=code==TextToSpeech.SUCCESS;if(!ttsReady){status="음성 초기화 실패 · 화면 결과로 확인하세요.";publish();}});
+            ServiceCompat.startForeground(this,NOTIFICATION,notification(),types);foreground=true;monitoring=true;gate.start();sceneChanges.reset();acquireLocks();
+            tts=new TextToSpeech(getApplicationContext(),code->{ttsReady=code==TextToSpeech.SUCCESS;if(!ttsReady){speechStatus="오프라인 음성 초기화 실패 · 화면 결과로 확인하세요.";publish();}});
             tts.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
             repeat=worker.scheduleWithFixedDelay(this::analyzeLatest,0,250,TimeUnit.MILLISECONDS);openCamera();main.post(reconnectBle);publish();
         }catch(Exception failure){terminalError="실시간 실행 실패: "+message(failure);stopMonitoring();}
@@ -127,19 +131,25 @@ public final class MonitorService extends Service {
     private void cameraError(int generation,CameraFailure error){
         if(!monitoring||stopping||generation!=cameraGeneration)return;
         if(!error.retryable){terminalError=error.message;stopMonitoring();return;}cameraGeneration++;VideoSource old=camera;camera=null;if(old!=null)old.close();clearFrame();
-        synchronized(modeLock){gate.invalidateFrames();}closeRequest();status=CameraSource.label(config.source)+" 연결 끊김 · 5초 후 재연결: "+error.message;publish();main.removeCallbacks(reconnect);main.postDelayed(reconnect,5000);
+        synchronized(modeLock){gate.invalidateFrames();sceneChanges.reconnect();}closeRequest();status=CameraSource.label(config.source)+" 연결 끊김 · 5초 후 재연결: "+error.message;publish();main.removeCallbacks(reconnect);main.postDelayed(reconnect,5000);
     }
     private void acceptFrame(int generation,LiveCamera.Frame frame){
         synchronized(frameLock){
             if(!monitoring||stopping||generation!=cameraGeneration){frame.bitmap.recycle();return;}
-            FramePacket old=latest;latest=new FramePacket(frame,sequence.incrementAndGet(),frame.receivedAt);if(old!=null)old.bitmap.recycle();
+            FramePacket old=latest;latest=new FramePacket(frame,sequence.incrementAndGet(),frame.receivedAt);
+            if(frame.detectionMs>=0){
+                sceneChanges.observe(latest.sequence,latest.signature,frame.boxes,frame.receivedAt);
+            }
+            if(old!=null)old.bitmap.recycle();
         }queueFrame();
     }
     private void queueFrame(){
         if(!framePosted.compareAndSet(false,true))return;
         main.post(()->{
             framePosted.set(false);if(!monitoring||stopping)return;FramePacket packet=latest;if(packet==null)return;
-            if(packet.detectionMs>=0&&packet.sequence>lastTrackedSequence){lastTrackedSequence=packet.sequence;YoloDetector.Box event=tracker.update(packet.boxes,SystemClock.elapsedRealtime());if(event!=null&&config.notify&&ble.isReady())ble.send("OBSTACLE\n");}
+            if(packet.detectionMs>=0&&packet.sequence>lastTrackedSequence){lastTrackedSequence=packet.sequence;YoloDetector.Box bleEvent=tracker.update(packet.boxes,SystemClock.elapsedRealtime());if(bleEvent!=null&&config.notify&&ble.isReady())ble.send("OBSTACLE\n");YoloDetector.Box event=fastTracker.update(packet.boxes,SystemClock.elapsedRealtime());if(event!=null&&packet.signature!=null&&packet.signature.unclearMessage()==null){
+                result=FastObstacleNotice.describe(event);status="새 장애물 감지 · 짧은 안내";if(config.speak){if(eleven!=null)eleven.stop();speak(result,false);}publish();
+            }}
             for(Observer observer:OBSERVERS){
                 ViewFrame view=null;
                 synchronized(frameLock){FramePacket current=latest;if(current!=null)try{Bitmap copy=current.bitmap.copy(Bitmap.Config.ARGB_8888,false);if(copy!=null)view=new ViewFrame(copy,current);}catch(OutOfMemoryError ignored){}}
@@ -148,27 +158,35 @@ public final class MonitorService extends Service {
         });
     }
     private void analyzeLatest(){
-        if(!monitoring||stopping)return;FramePacket frame=latest;if(frame==null||frame.detectionMs<0)return;
-        MonitorConfig chosen;ContinuousGate.Ticket ticket;
-        synchronized(modeLock){chosen=config;ticket=gate.begin(frame.sequence,frame.receivedAt,SystemClock.elapsedRealtime(),chosen.intervalMs);}
+        if(!monitoring||stopping)return;
+        FramePacket frame;MonitorConfig chosen;ContinuousGate.Ticket ticket;SceneChangeGate.Decision decision;
+        synchronized(modeLock){
+            chosen=config;synchronized(frameLock){frame=latest;if(frame==null||frame.detectionMs<0)return;decision=sceneChanges.decision(frame.sequence);}
+            if(decision==null){if(!gate.isPaused())main.post(()->{if(monitoring&&!stopping&&!gate.isPaused()&&gate.idle()){String waiting="큰 장면 변화·새 장애물 대기 중 · 같은 장면은 다시 안내하지 않습니다.";if(!waiting.equals(status)){status=waiting;publish();}}});return;}
+            if(decision.reason==SceneChangeGate.Reason.NEW_OBSTACLE){sceneChanges.accepted(decision);return;}
+            ticket=gate.begin(frame.sequence,frame.receivedAt,SystemClock.elapsedRealtime(),chosen.intervalMs);
+        }
         if(ticket==null)return;long started=SystemClock.elapsedRealtime();
         try{
-            String question=chosen.question+(chosen.useYolo?"\nYOLO auxiliary observations (may be wrong, normalized boxes): "+YoloDetector.describe(frame.boxes):"");
+            String question=chosen.question+(chosen.useYolo?"\nYOLO observations (may be wrong): "+YoloDetector.brief(frame.boxes):"");
             String answer;
-            if(chosen.cloud){
+            String unclear=decision.signature.unclearMessage();
+            if(unclear!=null)answer=unclear;
+            else if(chosen.cloud){
                 LocalVlm.get(this).release();check(ticket);String key;try{key=new ApiKeyStore(this).read();}catch(IOException error){throw new ConfigurationException(error);}
                 try(CloudNetwork.Lease internet=CloudNetwork.connect(this,()->!gate.current(ticket))){
                     check(ticket);progress(ticket,"Gemini 자동 분석 중 · "+internet.description);
                     try(GeminiClient.Request pending=new GeminiClient.Request(chosen.model,key,frame.jpeg,question,internet.connector,()->!gate.current(ticket))){request=pending;check(ticket);answer=pending.execute();}finally{request=null;}
                 }
-            }else answer=LocalVlm.get(this).describe(frame.jpeg,question,()->!gate.current(ticket),text->progress(ticket,text),partial->{});
-            check(ticket);long elapsed=SystemClock.elapsedRealtime()-started,age=SystemClock.elapsedRealtime()-frame.receivedAt;
+            }else answer=LocalVlm.get(this).describe(frame.jpeg,question,()->!gate.current(ticket),text->progress(ticket,text),partial->main.post(()->{if(monitoring&&!stopping&&gate.current(ticket)&&sceneChanges.relevant(decision)){result=partial;publish();}}));
+            String grounded=SceneLanguage.grounded(answer);check(ticket);synchronized(modeLock){if(gate.current(ticket))sceneChanges.accepted(decision);}long elapsed=SystemClock.elapsedRealtime()-started,age=SystemClock.elapsedRealtime()-frame.receivedAt;
             main.post(()->{
-                if(!monitoring||stopping||!gate.current(ticket))return;result=answer;status=String.format(Locale.ROOT,"%s 자동 분석 · %.1f초 · 사용 프레임 수신 %.1f초 전",chosen.cloud?"Gemini":"로컬 AI",elapsed/1000.0,age/1000.0);if(chosen.speak)speak(answer);publish();
+                if(!monitoring||stopping||!gate.current(ticket))return;if(!sceneChanges.relevant(decision)){status="장면이 달라져 이전 AI 설명 안내를 생략했습니다.";publish();return;}result=grounded;status=unclear!=null?"입력 영상 확인 · 단색/노출 상태로 AI 추론을 생략했습니다.":String.format(Locale.ROOT,"%s 자동 분석 · %.1f초 · 사용 프레임 수신 %.1f초 전",chosen.cloud?"Gemini":"로컬 AI",elapsed/1000.0,age/1000.0)+(chosen.cloud?"":" · "+LocalVlm.get(this).timings());if(chosen.speak)speak(grounded);publish();
             });
         }catch(CancellationException ignored){}
         catch(Throwable failure){
             if(gate.current(ticket)){
+                CrashDiagnostics.record(chosen.cloud?"Gemini 자동 분석":"로컬 AI 자동 분석",failure);
                 boolean pause=!chosen.cloud||failure instanceof ConfigurationException||failure instanceof OutOfMemoryError||(failure instanceof GeminiClient.ApiException&&((GeminiClient.ApiException)failure).status<500);
                 if(pause)gate.pause(ticket);else gate.defer(ticket,SystemClock.elapsedRealtime()+10000);
                 if(!chosen.cloud)LocalVlm.get(this).release();
@@ -187,11 +205,14 @@ public final class MonitorService extends Service {
             ble.connect(new BleLink.Device(adapter.getRemoteDevice(config.bleAddress),"HM-10"),config.serviceUuid,config.characteristicUuid);
         }catch(RuntimeException error){bleStatus="BLE 연결 실패: "+message(error);publish();}
     }
-    private void speak(String text){
-        if(tts==null||!ttsReady)return;String normalized=text.replaceAll("\\s+"," ").trim();if(normalized.equals(lastSpoken))return;
+    private void speak(String text){speak(text,config.cloud);}
+    private void speak(String text,boolean cloudVoice){
+        String normalized=text.replaceAll("\\s+"," ").trim();if(normalized.equals(lastSpoken))return;
+        if(cloudVoice){lastSpoken=normalized;eleven.speak(text);return;}
+        if(tts==null||!ttsReady){speechStatus="오프라인 음성 준비 대기 중";return;}
         Locale locale=text.matches("(?s).*[가-힣].*")?Locale.KOREAN:Locale.ENGLISH;Set<Voice> voices=tts.getVoices();
         Voice voice=voices==null?null:voices.stream().filter(v->!v.isNetworkConnectionRequired()&&v.getLocale().getLanguage().equals(locale.getLanguage())).max(Comparator.comparingInt(Voice::getQuality)).orElse(null);
-        if(voice==null){status+=" · 오프라인 음성이 없습니다.";return;}tts.setVoice(voice);tts.speak(text,TextToSpeech.QUEUE_FLUSH,null,"monitor-scene");lastSpoken=normalized;
+        if(voice==null){speechStatus="이 언어의 오프라인 음성이 없습니다.";return;}speechStatus="휴대폰 오프라인 음성 안내 중";tts.setVoice(voice);tts.speak(text,TextToSpeech.QUEUE_FLUSH,null,"monitor-scene");lastSpoken=normalized;
     }
     private Notification notification(){
         String title="길잡이 · "+(config!=null&&config.cloud?"Gemini":"로컬 AI")+(stopping?" 중지 처리 중":" 실시간 실행 중");
@@ -200,18 +221,18 @@ public final class MonitorService extends Service {
         return new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_camera).setContentTitle(title).setContentText(status).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setCategory(NotificationCompat.CATEGORY_SERVICE).addAction(android.R.drawable.ic_media_pause,"중지",stop).build();
     }
     private void publish(){
-        if(instance!=this)return;last=new Snapshot(monitoring||stopping,stopping,gate.isPaused(),ble!=null&&ble.isReady(),config,status,result,bleStatus);
+        if(instance!=this)return;last=new Snapshot(monitoring||stopping,stopping,gate.isPaused(),ble!=null&&ble.isReady(),config,status,result,bleStatus,speechStatus);
         for(Observer observer:OBSERVERS)observer.state(last);
         if(foreground&&SystemClock.elapsedRealtime()-lastNotice>=1000){lastNotice=SystemClock.elapsedRealtime();NotificationManager manager=getSystemService(NotificationManager.class);if(manager!=null&&(Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED))manager.notify(NOTIFICATION,notification());}
     }
     private void clearFrame(){synchronized(frameLock){FramePacket old=latest;latest=null;if(old!=null)old.bitmap.recycle();}}
     private void stopMonitoring(){
         if(cleanupQueued)return;cleanupQueued=true;stopping=true;monitoring=false;gate.stop();cameraGeneration++;main.removeCallbacks(reconnect);main.removeCallbacks(reconnectBle);main.removeCallbacks(renew);
-        if(repeat!=null)repeat.cancel(false);closeRequest();if(camera!=null){camera.close();camera=null;}if(ble!=null)ble.close();if(tts!=null)tts.stop();status=terminalError.isEmpty()?"실시간 중지 처리 중 · 현재 로컬 연산이 끝나면 종료합니다.":terminalError;publish();
+        if(repeat!=null)repeat.cancel(false);closeRequest();if(camera!=null){camera.close();camera=null;}if(ble!=null)ble.close();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();status=terminalError.isEmpty()?"실시간 중지 처리 중 · 현재 로컬 연산이 끝나면 종료합니다.":terminalError;publish();
         worker.execute(()->{try{LocalVlm.get(this).release();}finally{main.post(this::finishStop);}});
     }
     private void finishStop(){
-        clearFrame();if(tts!=null){tts.shutdown();tts=null;}if(wifiLock!=null&&wifiLock.isHeld())wifiLock.release();if(wake!=null&&wake.isHeld())wake.release();
+        clearFrame();if(eleven!=null){eleven.close();eleven=null;}if(tts!=null){tts.shutdown();tts=null;}if(wifiLock!=null&&wifiLock.isHeld())wifiLock.release();if(wake!=null&&wake.isHeld())wake.release();
         foreground=false;cleanupComplete=true;ServiceCompat.stopForeground(this,ServiceCompat.STOP_FOREGROUND_REMOVE);worker.shutdown();if(destroyed)markStopped();else stopSelf();
     }
     private void markStopped(){stopping=false;status=terminalError.isEmpty()?"실시간 AI 중지됨":terminalError;publish();if(instance==this)instance=null;}
