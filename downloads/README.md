@@ -1,6 +1,21 @@
 # 길잡이 테스트 APK
 
-## 최신 · 로컬 AI 종료 원인 수정 / 키 입력 개선 · 0.5.3-full
+## 최신 · 휴대폰 후면·전면 카메라 추가 · 0.6.1-full
+
+**[giljabi-0.6.1-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.6.1-full/giljabi-0.6.1-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.6.1-full)
+
+**영상 입력 선택 → 휴대폰 후면 카메라 / 휴대폰 전면 카메라**를 선택하고 카메라 권한을 허용하면 ESP 없이 사용할 수 있습니다. **영상 + YOLO 시작**으로 감지하거나 AI를 고른 뒤 **실시간 AI + 백그라운드 시작**으로 자동 설명합니다. ESP 입력·로컬 MiniCPM / Gemini·음성·HM-10 BLE·사진 분석과 0.5.3의 네이티브 템플릿 수정도 유지합니다.
+
+- Android 8 이상 ARM64, 실제 로컬 모델 두 파일 포함 **약 1.8GB**. 첫 모델 준비를 위해 내부 여유 공간 6GB 이상을 권장합니다.
+- **기존 공개 0.5.3과 서명이 달라 기존 길잡이 삭제 후 설치해야 합니다.** 삭제하면 개인 API 키·설정·준비된 모델 복사본이 삭제됩니다. 내장 모델은 다시 준비합니다.
+- 휴대폰 입력에는 ESP Wi-Fi·주소가 필요 없습니다. 로컬 AI는 인터넷 없이, Gemini는 개인 키·인터넷으로 실행합니다. Gemini 자동 설명은 사진을 Google로 반복 전송합니다.
+- 자동 실행은 앱이 보이는 상태에서 시작하고 앱 또는 실행 알림에서 중지합니다. 입력을 바꾸려면 먼저 중지합니다. YOLO 전용 영상은 앱 화면을 벗어나면 중지합니다.
+- Android 15 에뮬레이터의 실제 Camera2·YOLO, 후면·전면·홈 화면·화면 꺼짐·중지 후 재개방 검사 통과. 단위 검사 97개와 lint 오류 0, 실제 GGUF 네이티브 회귀 검사 통과. 실제 휴대폰의 장시간 실행·속도·BLE 실물 수신은 별도 확인이 필요합니다.
+- 공개 APK 직접 다운로드 후 모델 해시·v2 서명·16KB ZIP/ELF 정렬 확인. SHA-256: `a7e0b035ff732cb275abb81234ed272354b77878ac338f26efa4b3cd143df61b`.
+
+[사용법·검증 범위](../android/PHONE_CAMERA.md) · [검증 데이터](../android/PHONE_CAMERA_VALIDATION.json).
+
+## 이전 · 로컬 AI 종료 원인 수정 / 키 입력 개선 · 0.5.3-full
 
 **[giljabi-0.5.3-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.5.3-full/giljabi-0.5.3-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.5.3-full)
 

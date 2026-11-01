@@ -19,4 +19,24 @@ Camera2의 YUV_420_888 최신 이미지에 대해 한 번에 한 프레임만 �
 
 CI의 `cameraSmokeOnly=true`는 x86_64 에뮬레이터 전용이며 로컬 AI 네이티브와 GGUF를 포함하지 않습니다. 이 검사에서는 API를 호출하지 않고 로컬 모델 미준비로 장면 설명이 일시 중지된 상태에서 영상·YOLO·백그라운드 처리를 확인합니다. 사용자 다운로드는 별도의 ARM64 전체 모델 내장 APK이며, 에뮬레이터 검사와 실제 GGUF 네이티브 회귀 검사·전체 빌드·단위 검사·lint가 성공해야 게시합니다. 실제 휴대폰에서의 장시간 실행·카메라 화질·전체 AI 속도와 BLE 보드 수신은 별도 확인이 필요합니다.
 
-검사 결과와 게시 파일 검증은 빌드 완료 후 이 문서에 기록합니다.
+## 확인한 결과 · 2026-11-01
+
+소스 `fc6891e`, [CI 실행 41303584452](https://github.com/Siroko-0516/new_orphan/actions/runs/41303584452)의 [Android 카메라 검사](https://github.com/Siroko-0516/new_orphan/actions/runs/41303584452/job/124839352748)가 성공했습니다. Android 15 x86_64 에뮬레이터의 후면·전면 Camera2와 실제 YOLO를 사용한 계측 검사 2개가 통과했습니다. 홈 화면·화면 꺼짐 중 새 YOLO 프레임과 서비스 종료 후 카메라 재개방을 포함합니다.
+
+같은 소스의 로컬 빌드에서도 앱·계측 검사 코드 컴파일, 단위 검사 **97개(실패·오류·건너뜀 0)**, lint 오류 **0개**를 확인했습니다. 전체 APK CI의 실제 GGUF 템플릿 회귀·JNI 예외 변환 검사도 통과했습니다. 실제 휴대폰에서의 카메라·전체 AI·TTS·BLE 실물 검증을 대신하지 않습니다.
+
+## 공개 설치 파일 검증
+
+[0.6.1-full APK 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.6.1-full/giljabi-0.6.1-full-debug.apk) · [릴리스](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.6.1-full) · [검증 데이터](PHONE_CAMERA_VALIDATION.json).
+
+공개 URL에서 실제 APK와 체크섬·검사 결과를 내려받아 확인했습니다.
+
+- versionCode 11, Android 8 이상 ARM64, 파일 크기 **1,805,321,288 바이트**.
+- APK SHA-256 `a7e0b035ff732cb275abb81234ed272354b77878ac338f26efa4b3cd143df61b` — 릴리스 체크섬과 일치.
+- v2 서명 유효, 인증서 SHA-256 `7da3543cd611a85bb15bbb1df8079f876e30043a47ac4826769a373efb751cfa`.
+- 실제 GGUF 두 파일의 크기·SHA-256이 고정 명세와 일치하고 ZIP 무압축 저장. YOLO ONNX도 저장소 원본과 일치.
+- 16KB ZIP 정렬과 모든 ARM64 공유 라이브러리의 ELF PT_LOAD 16KB 정렬 확인.
+- APK에 PhoneCamera·YUV 변환·기존 ESP 입력·수정된 prefillTurn JNI 경로·카메라 권한 포함.
+- 전체 모델 내장 빌드에서도 단위 검사 97개, 실패·오류·건너뜀 0, lint 오류 0.
+
+**기존 공개 0.5.3과 인증서가 달라 기존 앱 삭제 후 설치해야 합니다.** 삭제하면 개인 키·설정·복사한 모델이 삭제됩니다. 모델은 APK에 포함돼 첫 사용 때 다시 준비합니다. 이는 실물 휴대폰의 설치·장시간 카메라·AI·TTS·BLE 성능 검증을 뜻하지 않습니다.

@@ -1,0 +1,50 @@
+{
+  "version": "0.6.1-full",
+  "bytes": 1805321288,
+  "sha256": "a7e0b035ff732cb275abb81234ed272354b77878ac338f26efa4b3cd143df61b",
+  "zipalign_16k": true,
+  "manifest_camera_permission": true,
+  "models": {
+    "model.gguf": {
+      "bytes": 672003680,
+      "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d"
+    },
+    "mmproj.gguf": {
+      "bytes": 1110117984,
+      "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900"
+    }
+  },
+  "elf_load_alignments": {
+    "lib/arm64-v8a/libc++_shared.so": 16384,
+    "lib/arm64-v8a/libggml-base.so": 16384,
+    "lib/arm64-v8a/libggml-cpu.so": 16384,
+    "lib/arm64-v8a/libggml.so": 16384,
+    "lib/arm64-v8a/libgiljabi_native.so": 16384,
+    "lib/arm64-v8a/libllama-common.so": 16384,
+    "lib/arm64-v8a/libllama.so": 16384,
+    "lib/arm64-v8a/libmtmd.so": 16384,
+    "lib/arm64-v8a/libonnxruntime.so": 16384,
+    "lib/arm64-v8a/libonnxruntime4j_jni.so": 16384
+  },
+  "source": "fc6891e6441314be6647d3adad3fc287bf6bfd9d",
+  "ci_run": 41303584452,
+  "camera_job": 124839352748,
+  "camera_android_api": 35,
+  "camera_instrumentation_tests": 2,
+  "camera_job_passed": true,
+  "checks": {
+    "tests": 97,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint_errors": 0
+  },
+  "native_checks": {
+    "template_failure_reproduced": true,
+    "complete_turn_rendering_passed": true,
+    "jni_exception_guard_passed": true
+  },
+  "apk_v2_verified": true,
+  "certificate_sha256": "7da3543cd611a85bb15bbb1df8079f876e30043a47ac4826769a373efb751cfa",
+  "physical_phone_tested": false
+}
