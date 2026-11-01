@@ -13,8 +13,8 @@ android {
         applicationId = "dev.giljabi.camera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = if (bundledModelDir.isPresent) "0.8.0-full" else "0.8.0-lite"
+        versionCode = 14
+        versionName = if (bundledModelDir.isPresent) "0.8.1-full" else "0.8.1-lite"
         buildConfigField("boolean", "BUNDLED_AI", bundledModelDir.isPresent.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += if (cameraSmokeOnly) "x86_64" else "arm64-v8a" }
@@ -29,6 +29,9 @@ android {
     androidResources { noCompress += "gguf" }
 }
 dependencies {
+    // ML Kit and AndroidX pull different pre/post-1.8 stdlib layouts; keep
+    // the JDK 7/8 compatibility artifacts aligned with the merged stdlib.
+    implementation(platform("org.jetbrains.kotlin:kotlin-bom:1.8.22"))
     implementation("androidx.core:core:1.15.0")
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
