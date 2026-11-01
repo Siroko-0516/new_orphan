@@ -1,8 +1,8 @@
 # 길잡이 Android · ESP 실시간 YOLO + 로컬 VLM
 
-최신 **0.8.1-full**은 앱 상단에서 **로컬 AI / Gemini**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, Gemini는 개인 API 키를 앱에 설정해 사용합니다. [두 모드 사용 안내](AI_MODES.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+최신 **0.8.2-full**은 앱 상단에서 **로컬 AI / Gemini**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, Gemini는 개인 API 키를 앱에 설정해 사용합니다. [두 모드 사용 안내](AI_MODES.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
 
-**0.8.1**은 YOLO 알림 대신 보행 상황의 AI 판단·무음 검토, 이미지 GPU, 한국어와 ElevenLabs 대체를 추가합니다. [사용법·거리/속도 제한](WALKING_GUIDANCE.md).
+**0.8.2**은 YOLO 알림 대신 보행 상황의 AI 판단·무음 검토, 이미지 GPU, 한국어와 ElevenLabs 대체를 추가합니다. [사용법·거리/속도 제한](WALKING_GUIDANCE.md).
 
 **0.7.0**은 변화가 있을 때만 안내, 새 장애물의 짧은 안내, 로컬 ARM 가속과 Gemini용 ElevenLabs 음성을 추가합니다. [사용법·속도 검증 범위](QUICK_GUIDANCE.md).
 

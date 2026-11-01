@@ -117,7 +117,7 @@ public final class MonitorService extends Service {
             ServiceCompat.startForeground(this,NOTIFICATION,notification(),types);foreground=true;monitoring=true;gate.start();sceneChanges.reset();narration.reset();acquireLocks();
             tts=new TextToSpeech(getApplicationContext(),code->main.post(()->{ttsReady=code==TextToSpeech.SUCCESS;if(!ttsReady){speechStatus="오프라인 음성 초기화 실패 · 화면 결과로 확인하세요.";publish();}else if(pendingOffline!=null){String text=pendingOffline;java.util.function.BooleanSupplier valid=pendingOfflineValid;pendingOffline=null;pendingOfflineValid=null;speakOffline(text,valid);}}));
             tts.setOnUtteranceProgressListener(new UtteranceProgressListener(){
-                @Override public void onStart(String id){main.post(()->{if(announcement!=null&&id.equals(announcement.nativeId))speechStarted(announcement.message);});}
+                @Override public void onStart(String id){main.post(()->{if(announcement==null||!id.equals(announcement.nativeId))return;if(!activeSpeechValid.getAsBoolean()){if(tts!=null)tts.stop();offlineSpeaking=false;main.removeCallbacks(nativeSpeechCheck);return;}speechStarted(announcement.message);});}
                 @Override public void onDone(String id){main.post(()->finishNative(id,false));}
                 @Override public void onError(String id){main.post(()->finishNative(id,true));}
                 @Override public void onStop(String id,boolean interrupted){main.post(()->finishNative(id,false));}
@@ -268,7 +268,7 @@ public final class MonitorService extends Service {
         if(failed){speechStatus="기본 음성 재생을 시작하지 못했습니다.";publish();}
     }
     private void speakGuidance(String text,boolean cloudVoice,java.util.function.BooleanSupplier valid,long capturedAt){
-        if(!valid.getAsBoolean())return;if(tts!=null)tts.stop();offlineSpeaking=false;main.removeCallbacks(nativeSpeechCheck);activeSpeechValid=valid;
+        if(!valid.getAsBoolean())return;if(eleven!=null)eleven.stop();if(tts!=null)tts.stop();pendingOffline=null;pendingOfflineValid=null;offlineSpeaking=false;main.removeCallbacks(nativeSpeechCheck);activeSpeechValid=valid;
         if(cloudVoice){
             long remaining=WalkingGuidance.MAX_SPEECH_AGE_MS-(SystemClock.elapsedRealtime()-capturedAt)-300;
             if(remaining<=300){speakOffline(text,valid);return;}
