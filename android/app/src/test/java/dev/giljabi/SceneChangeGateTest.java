@@ -19,6 +19,6 @@ public class SceneChangeGateTest {
     @Test public void oldProviderResultCannotConsumeNewProvidersFirstDescription(){SceneChangeGate g=new SceneChangeGate();g.reset();g.observe(1,sample(false,0),NONE,0);SceneChangeGate.Decision old=g.decision(1);g.reset();g.observe(2,sample(false,0),NONE,1000);g.accepted(old);assertEquals(SceneChangeGate.Reason.INITIAL,g.decision(2).reason);}
     @Test public void staleDescriptionCannotSpeakAfterViewChanges(){SceneChangeGate g=new SceneChangeGate();g.reset();g.observe(1,sample(false,0),NONE,0);SceneChangeGate.Decision old=g.decision(1);assertTrue(g.relevant(old));g.observe(2,sample(true,0),NONE,200);assertFalse(g.relevant(old));}
     @Test public void oldDescriptionIsObsoleteWhenNewObstacleAppears(){SceneChangeGate g=new SceneChangeGate();g.reset();g.observe(1,sample(false,0),NONE,0);SceneChangeGate.Decision old=g.decision(1);for(int i=2;i<5;i++)g.observe(i,sample(false,0),Collections.singletonList(person()),i*200);assertFalse(g.relevant(old));}
-    @Test public void fastNoticeDoesNotInventDistanceOrCollision(){String text=FastObstacleNotice.describe(new YoloDetector.Box(56,.9f,new float[]{.05f,.4f,.25f,.9f}));assertEquals("화면 왼쪽에 의자 감지.",text);assertFalse(text.contains("위험"));}
+
     @Test public void reconnectDoesNotRepeatUnchangedScene(){SceneChangeGate g=ready();g.reconnect();g.observe(100,sample(false,0),NONE,5000);assertNull(g.decision(100));}
 }

@@ -27,3 +27,18 @@ endif()
 add_library(giljabi_guard_probe SHARED guard_probe.cpp)
 target_include_directories(giljabi_guard_probe PRIVATE "$ENV{JAVA_HOME}/include" "$ENV{JAVA_HOME}/include/linux" "${BRIDGE}")
 set_target_properties(giljabi_guard_probe PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+# Host smoke test of the exact production JNI bridge with the real model pair.
+# Built only when explicitly selected; template/guard checks retain their small build.
+if(NOT TARGET mtmd)
+    set(LLAMA_INSTALL_VERSION "0.0.0") # Test-only ABI label for mtmd added outside the engine subdir.
+    add_subdirectory("${ENGINE}/tools/mtmd" mtmd)
+endif()
+add_library(giljabi_native SHARED "${BRIDGE}/llama_jni.cpp")
+target_include_directories(giljabi_native PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/host-android"
+    "$ENV{JAVA_HOME}/include" "$ENV{JAVA_HOME}/include/linux"
+    "${BRIDGE}" "${ENGINE}/common" "${ENGINE}/include"
+    "${ENGINE}/ggml/include" "${ENGINE}/ggml/src" "${ENGINE}/tools/mtmd" "${ENGINE}/vendor")
+target_link_libraries(giljabi_native PRIVATE llama llama-common mtmd)
+set_target_properties(giljabi_native PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

@@ -8,6 +8,8 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <atomic>
+#include <cstring>
 
 #include "logging.h"
 #include "chat.h"
@@ -15,6 +17,7 @@
 #include "llama.h"
 #include "sampling.h"
 #include "mtmd.h"
+#include "guidance_grammar.h"
 #include "mtmd-helper.h"
 
 template<class T>
@@ -54,6 +57,53 @@ static llama_batch                        g_batch;
 static common_chat_templates_ptr          g_chat_templates;
 static common_sampler                   * g_sampler;
 static mtmd_context                     * g_ctx_vision;
+// Vision acceleration is explicitly opted into by Java. CPU-only startup never
+// initializes a Vulkan driver, so an unsupported GPU cannot break CPU fallback.
+static std::string                        g_backend_directory;
+static bool                               g_vision_gpu_requested = false;
+static std::atomic_bool                   g_vision_gpu_selected{false};
+static bool                               g_vulkan_probed = false;
+
+static void vision_log_callback(enum ggml_log_level level, const char *text, void *) {
+    // The vision loader can legitimately fall back to CPU after device probing.
+    // Observe its actual selected backend rather than reporting the requested flag.
+    if (text && std::strstr(text, "CLIP using CPU backend")) g_vision_gpu_selected.store(false);
+    else if (text && std::strstr(text, "CLIP using Vulkan")) g_vision_gpu_selected.store(true);
+    minicpm_android_log_callback(level, text, nullptr);
+}
+
+static std::string backend_library(const char *filename) {
+    return g_backend_directory.empty() ? std::string(filename) : g_backend_directory + "/" + filename;
+}
+
+static void load_cpu_backend() {
+    if (ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU)) return;
+    // Each module's baseline-compiled score function rejects unsupported ISA
+    // features before its optimized kernels can execute. Order is cumulative.
+    static const char *candidates[] = {
+        "libggml-cpu-android_armv8.6_1.so",
+        "libggml-cpu-android_armv8.2_2.so",
+        "libggml-cpu-android_armv8.2_1.so",
+        "libggml-cpu-android_armv8.0_1.so",
+        "libggml-cpu.so"
+    };
+    for (const char *filename : candidates) {
+        if (ggml_backend_load(backend_library(filename).c_str()) &&
+            ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU)) return;
+    }
+    throw std::runtime_error("No compatible CPU inference backend was found");
+}
+
+static bool vision_gpu_available() {
+    if (!g_vulkan_probed) {
+        g_vulkan_probed = true;
+        // ggml's Vulkan registration catches unsupported API/feature errors and
+        // returns no backend. We also require an enumerated GPU/IGPU device.
+        ggml_backend_load(backend_library("libggml-vulkan.so").c_str());
+    }
+    return ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU) != nullptr ||
+           ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_IGPU) != nullptr;
+}
 // MiniCPM-V family version of the loaded mmproj. 0 = not minicpmv / no mmproj.
 // 5  = V-4.0
 // 6  = o-4.0
@@ -103,17 +153,14 @@ JNIEXPORT void JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_init(JNIEnv *env, jobject /*unused*/, jstring nativeLibDir) {
     return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
     llama_log_set(minicpm_android_log_callback, nullptr);
+    mtmd_log_set(vision_log_callback, nullptr);
 
     giljabi::utf_chars path_to_backend_ref(env, nativeLibDir);
     const char *path_to_backend = path_to_backend_ref.get();
-    LOGi("Loading backends from %s", path_to_backend);
-    ggml_backend_load_all_from_path(path_to_backend);
+    LOGi("Loading CPU backend from %s", path_to_backend);
+    g_backend_directory = path_to_backend;
+    load_cpu_backend();
     path_to_backend_ref.release();
-
-    if (ggml_backend_reg_count() == 0) {
-        LOGw("%s: No backends loaded from path, trying ggml_backend_load_all()", __func__);
-        ggml_backend_load_all();
-    }
 
     LOGi("%s: Backend count: %zu", __func__, ggml_backend_reg_count());
 
@@ -128,6 +175,9 @@ JNIEXPORT jint JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring jmodel_path) {
     return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
     llama_model_params model_params = llama_model_default_params();
+    // The measured bottleneck is vision. Keep the small language model on CPU
+    // instead of moving its weights when the optional Vulkan backend is loaded.
+    model_params.n_gpu_layers = 0;
 
     giljabi::utf_chars model_path_ref(env, jmodel_path);
     const char *model_path = model_path_ref.get();
@@ -172,8 +222,15 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
     const char *mmproj_path = mmproj_path_ref.get();
     LOGd("%s: Loading mmproj from: \n%s\n", __func__, mmproj_path);
 
+    // A previous GPU attempt may have created a partial/complete vision owner.
+    // All model operations are serialized by LocalVlm before this replacement.
+    if (g_ctx_vision) {
+        mtmd_free(g_ctx_vision);
+        g_ctx_vision = nullptr;
+    }
+    g_vision_gpu_selected = false;
     mtmd_context_params mparams = mtmd_context_params_default();
-    mparams.use_gpu   = false;
+    mparams.use_gpu = g_vision_gpu_requested && vision_gpu_available();
     mparams.print_timings = false;
     mparams.warmup = false; // Encode the first real image rather than a discarded dummy image.
 
@@ -197,12 +254,40 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
     // on the selected ModelInfo id (4.6 -> 46).  See iOS opt-r1's
     // MBHomeViewController+LoadModel.swift for the symmetric move.
 
+    LOGi("%s: vision GPU selected=%s; CPU remains available for unsupported operations", __func__, g_vision_gpu_selected.load() ? "yes" : "no");
     LOGi("%s: mmproj model loaded successfully! Vision: %s, slice-cap: %d (applied)",
          __func__,
          mtmd_support_vision(g_ctx_vision) ? "yes" : "no",
          g_image_max_slice_nums);
     return 0;
 
+    });
+}
+
+// These calls only select the backend for the next serialized vision load.
+// isVisionGpuEnabled reports the selected GPU mode, not that every graph node
+// runs on GPU: MTMD retains CPU execution for unsupported operations.
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_example_minicpm_1v_1demo_LlamaEngine_hasVisionGpu(JNIEnv *env, jobject) {
+    return giljabi::jni_guard<jboolean>(env,__func__,[&]() -> jboolean {
+        return vision_gpu_available() ? JNI_TRUE : JNI_FALSE;
+    });
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_minicpm_1v_1demo_LlamaEngine_setVisionGpuEnabled(JNIEnv *env, jobject, jboolean enabled) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
+        g_vision_gpu_requested = enabled == JNI_TRUE && vision_gpu_available();
+    });
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_example_minicpm_1v_1demo_LlamaEngine_isVisionGpuEnabled(JNIEnv *env, jobject) {
+    return giljabi::jni_guard<jboolean>(env,__func__,[&]() -> jboolean {
+        return g_ctx_vision && g_vision_gpu_selected.load() ? JNI_TRUE : JNI_FALSE;
     });
 }
 
@@ -285,6 +370,8 @@ static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT
     ctx_params.n_ubatch = BATCH_SIZE;
     ctx_params.n_threads = N_THREADS;
     ctx_params.n_threads_batch = N_THREADS;
+    ctx_params.offload_kqv = false;
+    ctx_params.op_offload = false;
     auto *context = llama_init_from_model(g_model, ctx_params);
     if (context == nullptr) {
         LOGe("%s: llama_new_context_with_model() returned null)", __func__);
@@ -292,17 +379,31 @@ static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT
     return context;
 }
 
-static common_sampler *new_sampler(float temp) {
+static common_sampler *new_sampler(float temp,bool guidance=false) {
     // Match the model's generation_config defaults: pure temperature sampling
     // with top_k / top_p disabled and no repetition penalty. Keep this in
     // lockstep with mtmd-ios.cpp so iOS and Android produce identical
     // distributions for a given seed.
     common_params_sampling sparams;
     sparams.temp = temp;
+    if(guidance)sparams.grammar=common_grammar(COMMON_GRAMMAR_TYPE_USER,GUIDANCE_JSON_GRAMMAR);
     sparams.top_k = 0;            // disabled
     sparams.top_p = 1.0f;         // disabled
     sparams.penalty_repeat = 1.0f; // disabled
     return common_sampler_init(g_model, sparams);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_minicpm_1v_1demo_LlamaEngine_beginTurn(JNIEnv *env,jobject,jboolean guidance){
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
+        if(!g_model||!g_context)throw std::logic_error("Local model is not prepared");
+        // Clear recurrent and KV data but retain allocated graph/context buffers.
+        llama_memory_clear(llama_get_memory(g_context),true);
+        common_sampler *next=new_sampler(DEFAULT_SAMPLER_TEMP,guidance==JNI_TRUE);
+        if(!next)throw std::runtime_error("Unable to prepare the response sampler");
+        common_sampler_free(g_sampler);g_sampler=next;
+    });
 }
 
 extern "C"
@@ -891,6 +992,7 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_unload(JNIEnv *env, jobject /*unus
         mtmd_free(g_ctx_vision);
         g_ctx_vision = nullptr;
     }
+    g_vision_gpu_selected = false;
 
     common_sampler_free(g_sampler);
     g_chat_templates.reset();

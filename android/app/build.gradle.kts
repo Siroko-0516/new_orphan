@@ -13,12 +13,12 @@ android {
         applicationId = "dev.giljabi.camera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = if (bundledModelDir.isPresent) "0.7.0-full" else "0.7.0-lite"
+        versionCode = 13
+        versionName = if (bundledModelDir.isPresent) "0.8.0-full" else "0.8.0-lite"
         buildConfigField("boolean", "BUNDLED_AI", bundledModelDir.isPresent.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += if (cameraSmokeOnly) "x86_64" else "arm64-v8a" }
-        if (!cameraSmokeOnly) externalNativeBuild { cmake { arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"); targets += listOf("giljabi_native", "ggml-cpu-android_armv8.0_1", "ggml-cpu-android_armv8.2_1", "ggml-cpu-android_armv8.2_2", "ggml-cpu-android_armv8.6_1") } }
+        if (!cameraSmokeOnly) externalNativeBuild { cmake { arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"); targets += listOf("giljabi_native", "ggml-vulkan", "ggml-cpu-android_armv8.0_1", "ggml-cpu-android_armv8.2_1", "ggml-cpu-android_armv8.2_2", "ggml-cpu-android_armv8.6_1") } }
     }
     if (!cameraSmokeOnly) externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -30,6 +30,7 @@ android {
 }
 dependencies {
     implementation("androidx.core:core:1.15.0")
+    implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")

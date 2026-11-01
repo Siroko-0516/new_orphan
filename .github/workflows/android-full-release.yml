@@ -100,6 +100,8 @@ jobs:
           PY
       - name: Prepare verified native engine
         run: python3 android/scripts/prepare_engine.py
+      - name: Prepare pinned Vulkan build headers
+        run: python3 android/scripts/prepare_vulkan_headers.py
       - name: Prepare pinned model and vision assets
         run: |
           python3 android/scripts/prepare_bundled_models.py --cache "$RUNNER_TEMP/model-cache" --output android/model-packs/minicpm-1b
@@ -116,7 +118,11 @@ jobs:
           PY
       - name: Build and verify full APK
         working-directory: android
-        run: ./gradlew --no-daemon -PbundledModelDir=../model-packs/minicpm-1b :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+        run: bash scripts/build_full.sh
+      - name: Validate real local guidance JSON and English caption
+        run: |
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build "$RUNNER_TEMP/giljabi-native-check" --target giljabi_native -j4
+          python3 android/native-tests/run_guidance_smoke.py --native-dir "$RUNNER_TEMP/giljabi-native-check/bin" --model android/model-packs/minicpm-1b/model.gguf --vision android/model-packs/minicpm-1b/mmproj.gguf --output guidance-native-validation.json
       - name: Summarize tests and lint
         if: always()
         run: |
@@ -153,10 +159,13 @@ jobs:
           with zipfile.ZipFile('android/app/build/outputs/apk/debug/app-debug.apk') as apk:
               for variant in ['android_armv8.0_1','android_armv8.2_1','android_armv8.2_2','android_armv8.6_1']:
                   assert 'lib/arm64-v8a/libggml-cpu-'+variant+'.so' in apk.namelist(), 'Missing runtime CPU backend: '+variant
+              assert 'lib/arm64-v8a/libggml-vulkan.so' in apk.namelist(), 'Missing optional vision GPU backend'
+              assert 'assets/licenses/vulkan-headers.txt' in apk.namelist()
               assert 'assets/licenses/kleidiai.txt' in apk.namelist()
           folder=Path('release-apk');folder.mkdir(exist_ok=True)
           shutil.copyfile('build-validation.json',folder/'checks.json')
           shutil.copyfile('native-validation.json',folder/'native-checks.json')
+          shutil.copyfile('guidance-native-validation.json',folder/'guidance-checks.json')
           name='giljabi-'+version+'-debug.apk';target=folder/name
           shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk',target)
           with target.open('rb') as stream:
@@ -175,7 +184,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · 변화 안내 / 로컬 가속 / ElevenLabs' --notes-file android/FULL_RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · 보행 상황 판단 / 이미지 GPU / 음성 대체' --notes-file android/FULL_RELEASE_NOTES.md
   release-notes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04

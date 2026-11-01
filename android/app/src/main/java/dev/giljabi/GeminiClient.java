@@ -19,15 +19,34 @@ final class GeminiClient {
     }
     static boolean validModel(String model){return model!=null&&model.matches("gemini-[A-Za-z0-9._-]{1,100}");}
     static boolean validKey(String key){return key!=null&&key.matches("[!-~]{10,1024}");}
-    static byte[] payload(byte[] jpeg,String question) throws IOException {
-        if(jpeg==null||jpeg.length<4||jpeg.length>MAX_IMAGE||(jpeg[0]&255)!=255||(jpeg[1]&255)!=216)throw new IOException("Gemini에는 2MB 이하 JPEG 사진을 사용하세요.");
+    static byte[] payload(byte[] jpeg,String question) throws IOException {return payload(new byte[][]{jpeg},question,false);}
+    static byte[] walkingPayload(byte[][] images,String question)throws IOException{return walkingPayload(images,question,DEFAULT_MODEL);}
+    static byte[] walkingPayload(byte[][] images,String question,String model)throws IOException{
+        byte[] bytes=payload(images,question,true);
+        if(!model.startsWith("gemini-3"))return bytes;
+        try{JSONObject body=new JSONObject(new String(bytes,StandardCharsets.UTF_8));body.getJSONObject("generationConfig").put("thinkingConfig",new JSONObject().put("thinkingLevel","MINIMAL"));return body.toString().getBytes(StandardCharsets.UTF_8);}
+        catch(JSONException error){throw new IOException("Gemini 보행 분석 요청을 만들지 못했습니다.",error);}
+    }
+    private static byte[] payload(byte[][] images,String question,boolean walking)throws IOException{
+        if(images==null||images.length<1||images.length>3)throw new IOException("사진은 1~3장이어야 합니다.");
+        long total=0;
+        for(byte[] jpeg:images){if(jpeg==null||jpeg.length<4||(jpeg[0]&255)!=255||(jpeg[1]&255)!=216)throw new IOException("Gemini에는 JPEG 사진을 사용하세요.");total+=jpeg.length;}
+        if(total>MAX_IMAGE)throw new IOException("Gemini 사진 합계는 2MB 이하여야 합니다.");
         if(question==null||question.trim().isEmpty()||question.length()>12000)throw new IOException("질문은 1~12000자로 입력하세요.");
         try{
-            JSONArray parts=new JSONArray().put(new JSONObject().put("inlineData",new JSONObject().put("mimeType","image/jpeg").put("data",Base64.getEncoder().encodeToString(jpeg)))).put(new JSONObject().put("text",question));
+            JSONArray parts=new JSONArray();
+            for(int i=0;i<images.length;i++){
+                if(walking)parts.put(new JSONObject().put("text","Cane camera frame "+(i+1)+" of "+images.length+"; chronological order, last is newest."));
+                parts.put(new JSONObject().put("inlineData",new JSONObject().put("mimeType","image/jpeg").put("data",Base64.getEncoder().encodeToString(images[i]))));
+            }
+            parts.put(new JSONObject().put("text",question));
+            JSONObject generation=new JSONObject().put("temperature",0.1).put("maxOutputTokens",walking?256:768);
+            if(walking)generation.put("responseMimeType","application/json").put("responseSchema",new JSONObject().put("type","OBJECT")
+                .put("properties",new JSONObject().put("speak",new JSONObject().put("type","BOOLEAN")).put("message",new JSONObject().put("type","STRING")).put("urgency",new JSONObject().put("type","STRING").put("enum",new JSONArray().put("none").put("notice").put("urgent"))))
+                .put("required",new JSONArray().put("speak").put("message").put("urgency")));
             JSONObject body=new JSONObject()
-                .put("systemInstruction",new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text","Describe only visible evidence in the language requested by the user. Do not invent objects, distance, motion, or collision risk. If the image is unclear or uniform, say you cannot confirm. Do not invent steps or curbs or give general walking advice or claims about white cane capabilities. YOLO observations may be wrong."))))
-                .put("contents",new JSONArray().put(new JSONObject().put("role","user").put("parts",parts)))
-                .put("generationConfig",new JSONObject().put("temperature",0.1).put("maxOutputTokens",768));
+                .put("systemInstruction",new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text","Describe only directly visible evidence in the requested language. Automatic walking guidance uses natural Korean. A cane-mounted camera sweeps; image position is not a measured travel path. Do not invent distances, physical height, safety, or cane capabilities. Treat YOLO observations as fallible context. For automatic walking guidance obey the requested JSON and speak=false when nothing useful changed."))))
+                .put("contents",new JSONArray().put(new JSONObject().put("role","user").put("parts",parts))).put("generationConfig",generation);
             return body.toString().getBytes(StandardCharsets.UTF_8);
         }catch(JSONException e){throw new IOException("Gemini 요청을 만들지 못했습니다.",e);}
     }
@@ -59,9 +78,15 @@ final class GeminiClient {
         private final AtomicBoolean closed=new AtomicBoolean();
         private volatile InputStream input;
         Request(String model,String key,byte[] jpeg,String question,Connector connector,BooleanSupplier cancelled) throws IOException {
+            this(model,key,payload(jpeg,question),connector,cancelled);
+        }
+        Request(String model,String key,byte[][] images,String question,Connector connector,BooleanSupplier cancelled)throws IOException{
+            this(model,key,walkingPayload(images,question,model),connector,cancelled);
+        }
+        private Request(String model,String key,byte[] body,Connector connector,BooleanSupplier cancelled)throws IOException{
             if(!validModel(model))throw new IOException("Gemini 모델 이름을 확인하세요.");
             if(!validKey(key))throw new IOException("Gemini 설정에서 API 키 입력 형식을 확인하세요.");
-            this.cancelled=cancelled;check();body=payload(jpeg,question);
+            this.cancelled=cancelled;check();this.body=body;
             URL endpoint=new URL("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent");
             connection=connector.open(endpoint);
             connection.setInstanceFollowRedirects(false);connection.setUseCaches(false);
