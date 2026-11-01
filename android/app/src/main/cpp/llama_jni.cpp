@@ -1,6 +1,8 @@
 // Adapted from OpenBMB/MiniCPM-V-Apps commit d0dd7a6074b950081d6303977efb646f2f85bb5b. MIT; see third_party/MiniCPM-LICENSE.
 #include <android/log.h>
 #include <jni.h>
+#include "jni_guard.h"
+#include "local_chat_prompt.h"
 #include <iomanip>
 #include <cmath>
 #include <string>
@@ -99,12 +101,14 @@ static void apply_minicpm5_thinking_suffix(std::string &prompt) {
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_init(JNIEnv *env, jobject /*unused*/, jstring nativeLibDir) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
     llama_log_set(minicpm_android_log_callback, nullptr);
 
-    const auto *path_to_backend = env->GetStringUTFChars(nativeLibDir, 0);
+    giljabi::utf_chars path_to_backend_ref(env, nativeLibDir);
+    const char *path_to_backend = path_to_backend_ref.get();
     LOGi("Loading backends from %s", path_to_backend);
     ggml_backend_load_all_from_path(path_to_backend);
-    env->ReleaseStringUTFChars(nativeLibDir, path_to_backend);
+    path_to_backend_ref.release();
 
     if (ggml_backend_reg_count() == 0) {
         LOGw("%s: No backends loaded from path, trying ggml_backend_load_all()", __func__);
@@ -115,20 +119,24 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_init(JNIEnv *env, jobject /*unused
 
     llama_backend_init();
     LOGi("Backend initiated; Log handler set.");
+
+    });
 }
 
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring jmodel_path) {
+    return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
     llama_model_params model_params = llama_model_default_params();
 
-    const auto *model_path = env->GetStringUTFChars(jmodel_path, 0);
+    giljabi::utf_chars model_path_ref(env, jmodel_path);
+    const char *model_path = model_path_ref.get();
     LOGi("%s: Loading model from: \n%s\n", __func__, model_path);
 
     FILE *f = fopen(model_path, "rb");
     if (!f) {
         LOGe("%s: Cannot open model file! Permission denied or file not found: %s", __func__, model_path);
-        env->ReleaseStringUTFChars(jmodel_path, model_path);
+        model_path_ref.release();
         return 1;
     }
     fseek(f, 0, SEEK_END);
@@ -137,7 +145,7 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring
     LOGi("%s: Model file size: %ld bytes (%.2f GB)", __func__, file_size, file_size / (1024.0 * 1024.0 * 1024.0));
 
     auto *model = llama_model_load_from_file(model_path, model_params);
-    env->ReleaseStringUTFChars(jmodel_path, model_path);
+    model_path_ref.release();
     if (!model) {
         LOGe("%s: llama_model_load_from_file returned null! Check logcat for llama.cpp internal errors.", __func__);
         return 2;
@@ -145,6 +153,8 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring
     g_model = model;
     LOGi("%s: Model loaded successfully!", __func__);
     return 0;
+
+    });
 }
 
 extern "C"
@@ -152,12 +162,14 @@ JNIEXPORT jint JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
                                                         jstring jmmproj_path,
                                                         jint jimage_max_slice_nums) {
+    return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
     if (!g_model) {
         LOGe("%s: Base model must be loaded first!", __func__);
         return 1;
     }
 
-    const auto *mmproj_path = env->GetStringUTFChars(jmmproj_path, 0);
+    giljabi::utf_chars mmproj_path_ref(env, jmmproj_path);
+    const char *mmproj_path = mmproj_path_ref.get();
     LOGd("%s: Loading mmproj from: \n%s\n", __func__, mmproj_path);
 
     mtmd_context_params mparams = mtmd_context_params_default();
@@ -170,7 +182,7 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
     mparams.n_threads = N_THREADS;
 
     g_ctx_vision = mtmd_init_from_file(mmproj_path, g_model, mparams);
-    env->ReleaseStringUTFChars(jmmproj_path, mmproj_path);
+    mmproj_path_ref.release();
 
     if (!g_ctx_vision) {
         LOGe("%s: Failed to load mmproj model!", __func__);
@@ -189,6 +201,8 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
          mtmd_support_vision(g_ctx_vision) ? "yes" : "no",
          g_image_max_slice_nums);
     return 0;
+
+    });
 }
 
 // Returns the MiniCPM-V family version of the currently loaded mmproj
@@ -199,8 +213,11 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
 // to expose but upstream master mtmd removed.
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_getMinicpmvVersionNative(JNIEnv * /*env*/, jobject) {
+Java_com_example_minicpm_1v_1demo_LlamaEngine_getMinicpmvVersionNative(JNIEnv *env, jobject) {
+    return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
     return (jint) g_minicpmv_version;
+
+    });
 }
 
 // Kotlin-driven setter for the mmproj version (see comment on
@@ -209,18 +226,22 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_getMinicpmvVersionNative(JNIEnv * 
 // loadMmproj() succeeds.  Passing 0 disables both branches.
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_setMinicpmvVersionNative(JNIEnv * /*env*/,
+Java_com_example_minicpm_1v_1demo_LlamaEngine_setMinicpmvVersionNative(JNIEnv *env,
                                                                       jobject,
                                                                       jint jversion) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
     g_minicpmv_version = (int) jversion;
     LOGi("%s: minicpmv_version set to %d", __func__, g_minicpmv_version);
+
+    });
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_setImageMaxSliceNumsNative(JNIEnv * /*env*/,
+Java_com_example_minicpm_1v_1demo_LlamaEngine_setImageMaxSliceNumsNative(JNIEnv *env,
                                                                         jobject,
                                                                         jint jn) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
     g_image_max_slice_nums = (int) jn;
     if (g_ctx_vision) {
         mtmd_set_image_max_slice_nums(g_ctx_vision, g_image_max_slice_nums);
@@ -228,15 +249,20 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_setImageMaxSliceNumsNative(JNIEnv 
     } else {
         LOGi("%s: image_max_slice_nums set to %d (stored)", __func__, g_image_max_slice_nums);
     }
+
+    });
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_setEnableThinkingNative(JNIEnv * /*env*/,
+Java_com_example_minicpm_1v_1demo_LlamaEngine_setEnableThinkingNative(JNIEnv *env,
                                                                      jobject,
                                                                      jboolean jenable) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
     g_enable_thinking = (bool) jenable;
     LOGi("%s: enable_thinking=%d", __func__, (int) g_enable_thinking);
+
+    });
 }
 
 static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT_CONTEXT_SIZE) {
@@ -280,7 +306,8 @@ static common_sampler *new_sampler(float temp) {
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_prepare(JNIEnv * /*env*/, jobject /*unused*/) {
+Java_com_example_minicpm_1v_1demo_LlamaEngine_prepare(JNIEnv *env, jobject /*unused*/) {
+    return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
     // MiniCPM-V-4.6 video understanding (up to 64 frames per turn) needs
     // a larger KV budget than the 4096 default; everything else stays at
     // 4096 to keep memory pressure low on older / non-vision models.
@@ -299,12 +326,17 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prepare(JNIEnv * /*env*/, jobject 
     g_chat_templates = common_chat_templates_init(g_model, "");
     g_sampler = new_sampler(DEFAULT_SAMPLER_TEMP);
     return 0;
+
+    });
 }
 
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_systemInfo(JNIEnv *env, jobject /*unused*/) {
+    return giljabi::jni_guard<jstring>(env,__func__,[&]() -> jstring {
     return env->NewStringUTF(llama_print_system_info());
+
+    });
 }
 
 constexpr const char *ROLE_SYSTEM       = "system";
@@ -325,7 +357,7 @@ static void reset_long_term_states(const bool clear_kv_cache = true) {
     g_image_prefilled = false;
     g_vision_mode = false;
 
-    if (clear_kv_cache)
+    if (clear_kv_cache && g_context)
         llama_memory_clear(llama_get_memory(g_context), false);
 }
 
@@ -415,9 +447,12 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_processSystemPrompt(
         jobject /*unused*/,
         jstring jsystem_prompt
 ) {
+    return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
+    if(!g_context||!g_chat_templates||!g_sampler)throw std::logic_error("Local model is not prepared");
     reset_short_term_states();
 
-    const auto *system_prompt = env->GetStringUTFChars(jsystem_prompt, nullptr);
+    giljabi::utf_chars system_prompt_ref(env, jsystem_prompt);
+    const char *system_prompt = system_prompt_ref.get();
     LOGd("%s: System prompt received: \n%s", __func__, system_prompt);
     std::string formatted_system_prompt(system_prompt);
 
@@ -425,7 +460,7 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_processSystemPrompt(
     if (has_chat_template) {
         formatted_system_prompt = chat_add_and_format(ROLE_SYSTEM, system_prompt);
     }
-    env->ReleaseStringUTFChars(jsystem_prompt, system_prompt);
+    system_prompt_ref.release();
 
     if (g_ctx_vision) {
         mtmd_input_text input_text;
@@ -477,6 +512,39 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_processSystemPrompt(
 
     system_prompt_position = current_position;
     return 0;
+
+    });
+}
+
+// Full multimodal turn: put image and text inside the user role before evaluation.
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_example_minicpm_1v_1demo_LlamaEngine_prefillTurn(
+        JNIEnv *env,jobject,jstring jsystem,jstring juser,jbyteArray jimage,jint image_size,jint n_predict) {
+    return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
+        if(!g_context||!g_ctx_vision||!g_chat_templates||!g_sampler)throw std::logic_error("Vision model is not prepared");
+        if(!jimage||image_size<=0||image_size>env->GetArrayLength(jimage)||n_predict<1||n_predict>1024)throw std::invalid_argument("Invalid image or token limit");
+        reset_long_term_states();reset_short_term_states();
+        giljabi::utf_chars system(env,jsystem),user(env,juser);
+        std::string user_content=std::string(mtmd_default_marker())+"\n"+user.get();
+        const std::string prompt=giljabi::render_turn(g_chat_templates.get(),system.get(),user_content,g_enable_thinking);
+        system.release();user.release();
+        giljabi::byte_elements data(env,jimage);
+        std::unique_ptr<mtmd_bitmap,decltype(&mtmd_bitmap_free)> bitmap(
+            mtmd_helper_bitmap_init_from_buf(g_ctx_vision,reinterpret_cast<const unsigned char*>(data.get()),static_cast<size_t>(image_size)),mtmd_bitmap_free);
+        data.release();
+        if(!bitmap)throw std::runtime_error("Unable to decode the input image");
+        std::unique_ptr<mtmd_input_chunks,decltype(&mtmd_input_chunks_free)> chunks(mtmd_input_chunks_init(),mtmd_input_chunks_free);
+        const mtmd_bitmap *images[]={bitmap.get()};
+        mtmd_input_text text;text.text=prompt.c_str();text.add_special=true;text.parse_special=true;
+        if(mtmd_tokenize(g_ctx_vision,chunks.get(),&text,images,1)!=0)throw std::runtime_error("Unable to tokenize the image and prompt");
+        llama_pos past=0;
+        if(mtmd_helper_eval_chunks(g_ctx_vision,g_context,chunks.get(),0,0,BATCH_SIZE,true,&past)!=0)throw std::runtime_error("Unable to evaluate the image and prompt");
+        current_position=past;generation_start_position=past;stop_generation_position=past+n_predict;
+        g_image_prefilled=false;g_vision_mode=true;
+        common_chat_msg user_msg;user_msg.role=ROLE_USER;user_msg.content=user_content;chat_msgs.push_back(user_msg);
+        return 0;
+    });
 }
 
 extern "C"
@@ -487,12 +555,15 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prefillImage(
         jbyteArray jimage_data,
         jint jimage_size
 ) {
+    return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
     if (!g_ctx_vision) {
         LOGe("%s: mmproj not loaded!", __func__);
         return 1;
     }
 
-    jbyte *data = env->GetByteArrayElements(jimage_data, nullptr);
+    if(jimage_size<0||!jimage_data||jimage_size>env->GetArrayLength(jimage_data))throw std::invalid_argument("Image length does not match byte array");
+    giljabi::byte_elements image_data_ref(env,jimage_data);
+    jbyte *data=image_data_ref.get();
     if (!data) {
         LOGe("%s: Failed to get image data from Java", __func__);
         return 2;
@@ -504,7 +575,7 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prefillImage(
         static_cast<size_t>(jimage_size)
     );
 
-    env->ReleaseByteArrayElements(jimage_data, data, JNI_ABORT);
+    image_data_ref.release();
 
     if (!bitmap) {
         LOGe("%s: Failed to create bitmap from image buffer", __func__);
@@ -545,11 +616,15 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prefillImage(
 
     LOGi("%s: Image prefilled, current_position: %d", __func__, current_position);
     return 0;
+
+    });
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_fullReset(JNIEnv *env, jobject) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
+    if(!g_model)throw std::logic_error("Local model is not prepared");
     reset_long_term_states();
     reset_short_term_states();
 
@@ -573,17 +648,22 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_fullReset(JNIEnv *env, jobject) {
     g_sampler = new_sampler(DEFAULT_SAMPLER_TEMP);
 
     LOGi("%s: Full reset complete - context recreated, KV cache fresh, sampler reinitialized", __func__);
+
+    });
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_nativeCancelGeneration(JNIEnv *, jobject) {
+Java_com_example_minicpm_1v_1demo_LlamaEngine_nativeCancelGeneration(JNIEnv *env, jobject) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
     common_sampler_reset(g_sampler);
     assistant_ss.str("");
     assistant_ss.clear();
     cached_token_chars.clear();
     LOGi("%s: Generation cancelled, sampler reset, KV cache preserved at position %d",
          __func__, current_position);
+
+    });
 }
 
 extern "C"
@@ -594,9 +674,12 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_processUserPrompt(
         jstring juser_prompt,
         jint n_predict
 ) {
+    return giljabi::jni_guard<jint>(env,__func__,[&]() -> jint {
+    if(!g_context||!g_chat_templates||!g_sampler)throw std::logic_error("Local model is not prepared");
     reset_short_term_states();
 
-    const auto *const user_prompt = env->GetStringUTFChars(juser_prompt, nullptr);
+    giljabi::utf_chars user_prompt_ref(env, juser_prompt);
+    const char *user_prompt = user_prompt_ref.get();
     LOGd("%s: User prompt received: \n%s", __func__, user_prompt);
 
     std::string content_for_format(user_prompt);
@@ -638,7 +721,7 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_processUserPrompt(
         }
         apply_minicpm5_thinking_suffix(formatted_user_prompt);
     }
-    env->ReleaseStringUTFChars(juser_prompt, user_prompt);
+    user_prompt_ref.release();
 
     if (formatted_user_prompt.size() >= 8 &&
         formatted_user_prompt.compare(formatted_user_prompt.size() - 8, 8, "<think>\n") == 0) {
@@ -696,6 +779,8 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_processUserPrompt(
 
     stop_generation_position = current_position + n_predict;
     return 0;
+
+    });
 }
 
 static bool is_valid_utf8(const char *string) {
@@ -734,6 +819,8 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_generateNextToken(
         JNIEnv *env,
         jobject /*unused*/
 ) {
+    return giljabi::jni_guard<jstring>(env,__func__,[&]() -> jstring {
+    if(!g_context||!g_model||!g_sampler)throw std::logic_error("Local model is not prepared");
     if (current_position >= g_n_ctx - OVERFLOW_HEADROOM) {
         LOGw("%s: Context full! Shifting...", __func__);
         shift_context();
@@ -768,7 +855,8 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_generateNextToken(
                 assistant_content.erase(0, 1);
             }
         }
-        chat_add_and_format(ROLE_ASSISTANT, assistant_content);
+        if(g_vision_mode){common_chat_msg msg;msg.role=ROLE_ASSISTANT;msg.content=assistant_content;chat_msgs.push_back(msg);}
+        else chat_add_and_format(ROLE_ASSISTANT, assistant_content);
         return nullptr;
     }
 
@@ -787,11 +875,14 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_generateNextToken(
         result = env->NewStringUTF("");
     }
     return result;
+
+    });
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_unload(JNIEnv * /*env*/, jobject /*unused*/) {
+Java_com_example_minicpm_1v_1demo_LlamaEngine_unload(JNIEnv *env, jobject /*unused*/) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
     reset_long_term_states();
     reset_short_term_states();
 
@@ -807,10 +898,15 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_unload(JNIEnv * /*env*/, jobject /
     llama_model_free(g_model);
     g_model = nullptr; g_context = nullptr; g_sampler = nullptr;
     g_batch = {};
+
+    });
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_shutdown(JNIEnv *, jobject /*unused*/) {
+Java_com_example_minicpm_1v_1demo_LlamaEngine_shutdown(JNIEnv *env, jobject /*unused*/) {
+    return giljabi::jni_guard<void>(env,__func__,[&]() -> void {
     llama_backend_free();
+
+    });
 }

@@ -12,8 +12,8 @@ android {
         applicationId = "dev.giljabi.camera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = if (bundledModelDir.isPresent) "0.5.2-full" else "0.5.2-lite"
+        versionCode = 9
+        versionName = if (bundledModelDir.isPresent) "0.5.3-full" else "0.5.3-lite"
         buildConfigField("boolean", "BUNDLED_AI", bundledModelDir.isPresent.toString())
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild { cmake { arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"); targets += "giljabi_native" } }

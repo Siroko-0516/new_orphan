@@ -1,6 +1,8 @@
 # 길잡이 Android · ESP 실시간 YOLO + 로컬 VLM
 
-최신 **0.5.2-full**은 앱 상단에서 **로컬 AI / Gemini**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, Gemini는 개인 API 키를 앱에 설정해 사용합니다. [두 모드 사용 안내](AI_MODES.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+최신 **0.5.3-full**은 앱 상단에서 **로컬 AI / Gemini**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, Gemini는 개인 API 키를 앱에 설정해 사용합니다. [두 모드 사용 안내](AI_MODES.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+
+**0.5.3**은 실제 종료 스택에서 확인된 MiniCPM 대화 템플릿 오류를 수정합니다. 시스템·사진·질문을 한 번에 렌더링하고 C++ 예외를 Java로 전달합니다. [원인·재현·검증](NATIVE_TEMPLATE_FIX.md).
 
 **0.5.2**는 API 키 붙여넣기 정리·원인별 입력 안내와 시스템 네이티브 상세 호출 기록 조회를 추가합니다. 실제 SIGABRT 원인은 아직 확인 중입니다. [입력·기록 개선 안내](KEY_AND_TRACE.md).
 

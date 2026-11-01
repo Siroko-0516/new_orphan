@@ -46,8 +46,7 @@ final class LocalVlm {
     }
     synchronized String describe(byte[] jpeg,String question,BooleanSupplier cancelled,Consumer<String> progress,Consumer<String> partial)throws Exception {
         prepare(cancelled,progress);check(cancelled);engine.fullReset();check(cancelled);
-        require(engine.processSystemPrompt("Describe only visible evidence. Do not invent objects, motion, distance, or safety guarantees. If uncertain, say so."),"시스템 질문 처리");check(cancelled);
-        require(engine.prefillImage(jpeg,jpeg.length),"이미지 처리");check(cancelled);require(engine.processUserPrompt(question,192),"질문 처리");
+        require(engine.prefillTurn("Describe only visible evidence. Do not invent objects, motion, distance, or safety guarantees. If uncertain, say so.",question,jpeg,jpeg.length,192),"이미지·질문 처리");check(cancelled);
         StringBuilder answer=new StringBuilder();
         for(int i=0;i<384;i++){check(cancelled);String token=engine.generateNextToken();if(token==null)break;answer.append(token);partial.accept(answer.toString());}
         check(cancelled);String value=answer.toString().replaceAll("(?s)<think>.*?</think>","").trim();if(value.isEmpty())throw new IOException("빈 답변입니다. 질문 또는 모델 파일을 확인하세요.");return value;

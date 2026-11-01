@@ -8,6 +8,7 @@ public final class LlamaEngine {
     public native int loadMmproj(String path, int imageMaxSlices);
     public native int prepare();
     public native int processSystemPrompt(String prompt);
+    public native int prefillTurn(String systemPrompt, String userPrompt, byte[] jpeg, int size, int maxTokens);
     public native int prefillImage(byte[] jpeg, int size);
     public native int processUserPrompt(String prompt, int maxTokens);
     public native String generateNextToken();

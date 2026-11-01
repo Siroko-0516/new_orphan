@@ -45,6 +45,16 @@ jobs:
         run: |
           python3 android/scripts/prepare_bundled_models.py --cache "$RUNNER_TEMP/model-cache" --output android/model-packs/minicpm-1b
           rm -rf -- "${RUNNER_TEMP:?}/model-cache"
+      - name: Reproduce template failure and verify native fix
+        run: |
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" -S android/native-tests -B "$RUNNER_TEMP/giljabi-native-check" -G 'Unix Makefiles'
+          "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --build "$RUNNER_TEMP/giljabi-native-check" --target template_regression giljabi_guard_probe -j4
+          "$RUNNER_TEMP/giljabi-native-check/bin/template_regression" android/model-packs/minicpm-1b/model.gguf
+          java -Djava.library.path="$RUNNER_TEMP/giljabi-native-check/bin" android/native-tests/NativeGuardProbe.java
+          python3 - <<'PY'
+          from pathlib import Path
+          Path('native-validation.json').write_text('{"template_failure_reproduced":true,"complete_turn_rendering_passed":true,"jni_exception_guard_passed":true}\n')
+          PY
       - name: Build and verify full APK
         working-directory: android
         run: ./gradlew --no-daemon -PbundledModelDir=../model-packs/minicpm-1b :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
@@ -83,6 +93,7 @@ jobs:
               raise SystemExit('Refusing to publish a lite build as the bundled app')
           folder=Path('release-apk');folder.mkdir(exist_ok=True)
           shutil.copyfile('build-validation.json',folder/'checks.json')
+          shutil.copyfile('native-validation.json',folder/'native-checks.json')
           name='giljabi-'+version+'-debug.apk';target=folder/name
           shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk',target)
           with target.open('rb') as stream:
