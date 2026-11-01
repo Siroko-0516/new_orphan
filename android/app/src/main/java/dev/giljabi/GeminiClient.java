@@ -18,7 +18,7 @@ final class GeminiClient {
         ApiException(int status){super(httpError(status));this.status=status;}
     }
     static boolean validModel(String model){return model!=null&&model.matches("gemini-[A-Za-z0-9._-]{1,100}");}
-    static boolean validKey(String key){return key!=null&&key.matches("[A-Za-z0-9_-]{10,256}");}
+    static boolean validKey(String key){return key!=null&&key.matches("[!-~]{10,1024}");}
     static byte[] payload(byte[] jpeg,String question) throws IOException {
         if(jpeg==null||jpeg.length<4||jpeg.length>MAX_IMAGE||(jpeg[0]&255)!=255||(jpeg[1]&255)!=216)throw new IOException("Gemini에는 2MB 이하 JPEG 사진을 사용하세요.");
         if(question==null||question.trim().isEmpty()||question.length()>12000)throw new IOException("질문은 1~12000자로 입력하세요.");
@@ -60,7 +60,7 @@ final class GeminiClient {
         private volatile InputStream input;
         Request(String model,String key,byte[] jpeg,String question,Connector connector,BooleanSupplier cancelled) throws IOException {
             if(!validModel(model))throw new IOException("Gemini 모델 이름을 확인하세요.");
-            if(!validKey(key))throw new IOException("Gemini API 키를 설정하세요. 공백 없이 키 문자열만 입력하세요.");
+            if(!validKey(key))throw new IOException("Gemini 설정에서 API 키 입력 형식을 확인하세요.");
             this.cancelled=cancelled;check();body=payload(jpeg,question);
             URL endpoint=new URL("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent");
             connection=connector.open(endpoint);

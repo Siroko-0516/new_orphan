@@ -37,6 +37,12 @@ public class GeminiClientTest {
         assertEquals("image/jpeg",parts.getJSONObject(0).getJSONObject("inlineData").getString("mimeType"));
         assertTrue(parts.getJSONObject(1).getString("text").contains("한국어"));assertEquals(1,c.outputOpens);assertTrue(c.disconnected);assertTrue(c.bodyClosed);
     }
+    @Test public void cleanedPasteIsSentAsExactHeaderValue()throws Exception {
+        ApiKeyInput.Parsed parsed=ApiKeyInput.parse("\ufeff\u00a0\""+KEY.substring(0,12)+"\n\u200b"+KEY.substring(12)+"\"\r\n");
+        assertNull(parsed.problem);Connection c=new Connection();
+        try(GeminiClient.Request r=new GeminiClient.Request(GeminiClient.DEFAULT_MODEL,parsed.value,JPEG,"Describe the photo.",url->c,()->false)){assertEquals("앞에 의자가 있습니다.",r.execute());}
+        assertEquals(KEY,c.getRequestProperty("x-goog-api-key"));assertFalse(c.sent.toString(StandardCharsets.UTF_8).contains(KEY));
+    }
     @Test public void excludesThoughtPartsAndJoinsVisibleAnswer()throws Exception {
         String json="{\"promptFeedback\":{\"blockReason\":\"BLOCK_REASON_UNSPECIFIED\"},\"candidates\":[{\"content\":{\"parts\":[{\"thought\":true,\"text\":\"hidden\"},{\"text\":\"Hello \"},{\"text\":\"world\"}]}}]}";
         assertEquals("Hello world",GeminiClient.response(json.getBytes(StandardCharsets.UTF_8)));

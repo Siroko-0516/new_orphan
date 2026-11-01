@@ -67,7 +67,15 @@ final class CrashDiagnostics {
             try{
                 java.util.List<ApplicationExitInfo> exits=manager.getHistoricalProcessExitReasons(context.getPackageName(),0,3);
                 if(exits.isEmpty())out.append("기록 없음\n");
-                for(ApplicationExitInfo exit:exits)out.append(DateFormat.getDateTimeInstance().format(new Date(exit.getTimestamp()))).append(" · ").append(reason(exit.getReason())).append(" (code ").append(exit.getReason()).append(") · status ").append(exit.getStatus()).append("\nPSS ").append(exit.getPss()/1024).append(" MiB / RSS ").append(exit.getRss()/1024).append(" MiB\n").append(exit.getDescription()).append('\n');
+                for(ApplicationExitInfo exit:exits){
+                    out.append(DateFormat.getDateTimeInstance().format(new Date(exit.getTimestamp()))).append(" · ").append(reason(exit.getReason())).append(" (code ").append(exit.getReason()).append(") · status ").append(exit.getStatus()).append("\nPSS ").append(exit.getPss()/1024).append(" MiB / RSS ").append(exit.getRss()/1024).append(" MiB\n").append(exit.getDescription()).append('\n');
+                    if(Build.VERSION.SDK_INT>=31&&exit.getReason()==ApplicationExitInfo.REASON_CRASH_NATIVE){
+                        try(InputStream trace=exit.getTraceInputStream()){
+                            if(trace==null)out.append("Android가 상세 추적 파일을 제공하지 않았습니다. PC 로그 수집을 이용하세요.\n");
+                            else out.append(NativeTombstone.read(trace));
+                        }catch(IOException|RuntimeException failure){out.append("상세 추적 파일을 읽지 못했습니다. PC 로그 수집을 이용하세요.\n");}
+                    }
+                }
             }catch(RuntimeException failure){out.append("종료 기록을 읽지 못했습니다.\n");}
         }
         out.append("\n오류 기록은 자동 전송하지 않습니다. 복사한 내용을 확인하고 공유하세요.");return out.toString();

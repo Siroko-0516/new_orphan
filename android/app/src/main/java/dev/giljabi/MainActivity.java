@@ -203,7 +203,10 @@ public final class MainActivity extends Activity {
         if(busy)return;
         LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(32,8,32,8);
         text(panel,apiKeys.hasKey()?"키가 저장돼 있습니다. 새 키를 입력하면 교체하고, 비워두면 기존 키를 유지합니다.":"본인의 Gemini API 키를 입력하세요. 키는 이 휴대폰의 앱 저장소에 암호화해 보관합니다.",14);
-        EditText keyInput=new EditText(this);keyInput.setHint("개인 Gemini API 키");keyInput.setSingleLine(true);keyInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);keyInput.setSaveEnabled(false);keyInput.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);panel.addView(keyInput);
+        EditText keyInput=new EditText(this);keyInput.setHint("개인 Gemini API 키");keyInput.setSingleLine(true);keyInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);keyInput.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance());keyInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);keyInput.setSaveEnabled(false);keyInput.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);panel.addView(keyInput);
+        CheckBox reveal=new CheckBox(this);reveal.setText("입력한 키 표시");panel.addView(reveal);
+        reveal.setOnCheckedChangeListener((view,checked)->{keyInput.setTransformationMethod(checked?null:android.text.method.PasswordTransformationMethod.getInstance());keyInput.setSelection(keyInput.length());});
+        text(panel,"붙여넣기의 공백·줄바꿈·보이지 않는 서식 문자는 저장 전에 정리합니다. 키의 실제 인증 여부는 Gemini에 요청할 때 확인됩니다.",13);
         EditText modelInput=new EditText(this);modelInput.setSingleLine(true);modelInput.setHint("Gemini 모델 이름");modelInput.setText(cloudModel());panel.addView(modelInput);
         text(panel,"기본 모델: "+GeminiClient.DEFAULT_MODEL+". API 키를 채팅으로 보내지 말고 이 입력칸에 입력하세요. Gemini 분석에는 인터넷과 사용 가능한 API 할당량이 필요합니다.",13);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Gemini 설정").setView(panel).setPositiveButton("저장",null).setNegativeButton("취소",null)
@@ -211,12 +214,12 @@ public final class MainActivity extends Activity {
         dialog.setOnShowListener(d->{
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setEnabled(apiKeys.hasKey());
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-                String key=keyInput.getText().toString().trim(),model=modelInput.getText().toString().trim();
+                ApiKeyInput.Parsed pasted=ApiKeyInput.parse(keyInput.getText().toString());String key=pasted.value,model=modelInput.getText().toString().trim();
                 if(!GeminiClient.validModel(model)){modelInput.setError("gemini-로 시작하는 모델 이름을 입력하세요.");return;}
-                if(!key.isEmpty()&&!GeminiClient.validKey(key)){keyInput.setError("공백 없이 API 키 문자열만 입력하세요.");return;}
+                if(pasted.problem!=null){keyInput.setError(pasted.problem);return;}
                 if(key.isEmpty()&&!apiKeys.hasKey()){keyInput.setError("개인 Gemini API 키를 입력하세요.");return;}
                 keyInput.setText("");dialog.dismiss();
-                runJob(()->{if(!key.isEmpty())apiKeys.save(key);settings.edit().putString("gemini_model",model).apply();ui(()->{setStatus("Gemini 설정 저장 완료.");if(MonitorService.active()&&cloudSelected())updateMonitor();updateControls();});});
+                runJob(()->{if(!key.isEmpty())apiKeys.save(key);settings.edit().putString("gemini_model",model).apply();ui(()->{setStatus(pasted.cleaned&&!key.isEmpty()?"붙여넣기 서식을 정리해 Gemini API 키를 저장했습니다.":"Gemini 설정 저장 완료.");if(MonitorService.active()&&cloudSelected())updateMonitor();updateControls();});});
             });
         });
         dialog.show();
