@@ -1,13 +1,208 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>길잡이</title><link rel="stylesheet" href="/static/compact.css"></head>
-<body><main>
-<header><strong>길잡이</strong><button id="choose-model">모델 변경 · <span id="selected-model">물체 감지만</span></button></header>
-<div class="layout"><section class="camera-panel"><div class="panel-top"><span>카메라</span><span id="camera-state">대기</span></div><div class="viewport"><video id="video" autoplay playsinline muted></video><canvas id="overlay"></canvas><div id="placeholder">카메라를 시작하세요</div></div>
-<div class="controls"><button id="start" class="primary">시작</button><button id="stop" disabled>중지</button><label><input id="voice" type="checkbox" checked> 음성</label></div></section>
-<section class="results"><p id="local-alert" role="status" hidden></p><div id="risk" class="risk unknown"><span id="risk-icon">◌</span> <strong id="risk-title">대기</strong></div><p id="guidance" aria-live="polite">모델을 선택하고 시작하세요.</p><small id="updated"></small><div class="object-title">감지 <span id="count">0개</span></div><div id="objects"></div></section></div>
-<p id="notice" role="status" hidden></p>
-<details><summary>음성 설정 · 상태</summary><div class="controls"><button id="test-native">기본 음성 테스트</button><button id="test-speech">음성 테스트</button></div><p id="tts-feedback" role="status"></p><p><span id="tts-mode">기본 TTS</span> · <span id="tts-led">대기</span></p><p>감지 <span id="yolo-led">대기</span> · 분석 <span id="ai-led">꺼짐</span> · <span id="provider">연결 확인 중</span></p></details>
-<small class="privacy">감지는 기기에서 처리합니다. 온라인 모델 선택 시 일부 사진이 AI 제공자에게 전송됩니다. 보조 안내용입니다.</small>
-<input id="ai-optin" type="checkbox" hidden disabled>
-<dialog id="model-dialog"><form method="dialog"><div class="dialog-head"><strong>모델 선택</strong><button aria-label="닫기">닫기</button></div></form><div class="choices"><button data-provider="none">물체 감지만 <small>YOLO · 기기 내 실행</small></button><button data-provider="gemini" disabled>Gemini <small id="gemini-state">서버 설정 확인 중</small></button><button data-provider="openai" disabled>GPT <small id="openai-state">서버 설정 확인 중</small></button><button disabled>MiniCPM 4.7 <small>현재 미연결 · 준비 중</small></button></div></dialog>
-</main><script type="module" src="/static/app.js"></script></body></html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b625a">
+  <meta name="description" content="카메라로 주변을 살피고 필요한 변화만 짧게 확인하는 길잡이 웹 앱입니다.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>길잡이 · 카메라 안내</title>
+  <link rel="stylesheet" href="/static/compact.css">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+</head>
+<body>
+  <a class="skip-link" href="#session-controls">카메라 조작으로 건너뛰기</a>
+  <main>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="길잡이 홈">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none"><path d="M10 26V18c0-4.4 3.6-8 8-8h4" stroke="currentColor" stroke-width="3.3" stroke-linecap="round"/><path d="m18 5 5 5-5 5M17 25v-5" stroke="currentColor" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span>길잡이<small>카메라 안내</small></span>
+      </a>
+      <div class="header-actions">
+        <span class="web-label">WEB</span>
+        <button id="choose-model" class="model-switch" type="button" aria-haspopup="dialog" aria-controls="model-dialog">
+          <span class="model-switch-label">안내 방식</span>
+          <strong id="selected-model">물체 감지만</strong>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow"><span aria-hidden="true"></span> 필요한 변화에 집중하는 안내</p>
+        <h1 id="page-title">필요한 변화만,<br><span>차분하게 안내해요.</span></h1>
+        <p class="intro-description">카메라로 주변을 살피고 달라진 상황을 짧게 확인하세요.<br class="desktop-break"> 비슷한 장면에서는 안내를 반복하지 않아요.</p>
+      </div>
+      <div class="intro-note">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v4m0 10v4M3 12h4m10 0h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.7"/></svg>
+        <p><strong>시작 전, 카메라 방향을 맞춰주세요.</strong><br>앞을 향한 카메라로 주변 상황을 확인해요.</p>
+      </div>
+    </section>
+
+    <p id="notice" class="notice" role="status" aria-atomic="true" hidden></p>
+
+    <div class="layout">
+      <section class="camera-panel panel" aria-labelledby="camera-title">
+        <div class="panel-top">
+          <div class="section-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m8 6 1.5-2h5L16 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.5" stroke="currentColor" stroke-width="1.7"/></svg></span><h2 id="camera-title">실시간 카메라</h2></div>
+          <span id="camera-state" class="status-badge">연결 전</span>
+        </div>
+
+        <div class="camera-source-row">
+          <label for="camera-source">카메라 선택</label>
+          <select id="camera-source" aria-describedby="camera-feedback">
+            <option value="back">휴대폰 후면 카메라</option>
+            <option value="front">휴대폰 전면 카메라</option>
+            <option value="esp">ESP32-CAM</option>
+          </select>
+        </div>
+        <div id="esp-settings" class="esp-settings" hidden>
+          <label for="esp-url">ESP 카메라 주소</label>
+          <input id="esp-url" type="url" inputmode="url" value="http://192.168.4.1:81/stream" placeholder="http://192.168.4.1:81/stream" autocomplete="off" spellcheck="false" autocapitalize="off">
+          <small>ESP 카메라와 같은 Wi-Fi에 연결한 뒤 주소를 확인해주세요.</small>
+        </div>
+
+        <div id="session-controls" class="controls session-controls" tabindex="-1">
+          <button id="start" class="primary start-button" type="button"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m7 4 9 6-9 6V4Z" fill="currentColor"/></svg>카메라 시작</button>
+          <button id="stop" class="stop-button" type="button" disabled><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="1.5" fill="currentColor"/></svg>중지</button>
+          <label class="voice-toggle"><input id="voice" type="checkbox" checked><span class="toggle-track" aria-hidden="true"></span><span>음성 안내</span></label>
+        </div>
+
+        <div class="viewport">
+          <video id="video" autoplay playsinline muted aria-label="실시간 카메라 영상"></video>
+          <img id="esp-preview" alt="ESP 카메라 실시간 영상" hidden>
+          <img id="photo-preview" alt="분석할 사진 미리보기" hidden>
+          <canvas id="overlay" aria-hidden="true"></canvas>
+          <div id="placeholder">
+            <svg class="placeholder-icon" viewBox="0 0 52 52" fill="none" aria-hidden="true"><rect x="7" y="14" width="38" height="29" rx="7" stroke="currentColor" stroke-width="1.8"/><path d="m17 14 3-6h12l3 6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="26" cy="28" r="8" stroke="currentColor" stroke-width="1.8"/><path d="M36 21h1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+            <strong>주변을 살펴볼 준비가 됐어요.</strong>
+            <span>시작을 누르고 카메라 사용을 허용해주세요.</span>
+          </div>
+          <span class="viewport-label" aria-hidden="true"><span></span> CAMERA VIEW</span>
+        </div>
+
+        <p id="camera-feedback" class="camera-feedback" role="status">사용할 카메라를 고른 뒤 시작해주세요.</p>
+      </section>
+
+      <aside class="side-panel" aria-label="현재 안내와 음성 상태">
+        <section class="results panel" aria-labelledby="guidance-title">
+          <div class="guidance-heading"><span class="eyebrow">지금의 안내</span><span class="quiet-mark" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <h2 id="guidance-title" class="sr-only">현재 상황 안내</h2>
+          <p id="local-alert" role="status" aria-atomic="true" hidden></p>
+          <div id="risk" class="risk unknown"><span id="risk-icon" aria-hidden="true">◌</span><strong id="risk-title">안내 대기 중</strong></div>
+          <p id="guidance" aria-live="polite" aria-atomic="true">카메라를 시작하면<br>주변 상황을 확인할 수 있어요.</p>
+          <p id="updated" class="updated">아직 분석하지 않았어요.</p>
+          <div class="quiet-help"><span aria-hidden="true">✓</span><p>비슷한 장면은 반복해서 말하지 않아요.<br>새로운 안내가 필요할 때 알려드려요.</p></div>
+        </section>
+
+        <section class="voice-panel panel" aria-labelledby="voice-title">
+          <div class="voice-panel-heading"><h2 id="voice-title">음성 안내</h2><span id="tts-led" class="status-badge">대기</span></div>
+          <p id="tts-mode" class="voice-mode">브라우저 기본 음성</p>
+          <p id="tts-feedback" class="voice-feedback" role="status" aria-atomic="true">음성 시험으로 기기의 소리를 먼저 확인해보세요.</p>
+          <div class="voice-tests"><button id="test-native" class="small-button" type="button">기본 음성 시험</button><button id="test-speech" class="small-button" type="button">선택 음성 시험</button></div>
+        </section>
+
+        <details class="objects-details panel">
+          <summary><span>보조 감지 정보</span><span id="count" class="count-badge">0개</span><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></summary>
+          <div id="objects"><p class="empty">카메라를 시작하면 감지 정보를 볼 수 있어요.</p></div>
+        </details>
+      </aside>
+    </div>
+
+    <div class="secondary-layout">
+      <section class="photo-panel panel" aria-labelledby="photo-title">
+        <div class="section-title"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.7"/><circle cx="8" cy="8" r="1.5" stroke="currentColor" stroke-width="1.7"/><path d="m4 17 5-5 4 4 3-3 5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><h2 id="photo-title">사진 한 장 확인하기</h2></div>
+        <p class="section-description">저장된 사진을 골라 궁금한 내용을 확인할 수 있어요.</p>
+        <label class="field-label" for="photo-input">분석할 사진</label>
+        <input id="photo-input" type="file" accept="image/*">
+        <label class="field-label" for="photo-question">궁금한 점 <span class="optional">선택</span></label>
+        <input id="photo-question" type="text" maxlength="1000" placeholder="예: 앞쪽 통로에 무엇이 놓여 있나요?" autocomplete="off"><p class="field-help">사진에서 확인되는 내용만 답하며, 작은 로컬 모델의 답변은 제한적일 수 있어요.</p>
+        <button id="analyze-photo" class="secondary analyze-button" type="button" disabled>사진 분석하기<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </section>
+
+      <details id="settings-panel" class="settings-panel panel">
+        <summary><span class="settings-summary"><span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 17h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="7" r="3" fill="white" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="17" r="3" fill="white" stroke="currentColor" stroke-width="1.7"/></svg></span><span><strong>연결·음성 설정</strong><small>개인 API 키, 사용할 음성, 로컬 AI 준비</small></span></span><svg class="summary-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></summary>
+        <div class="settings-content">
+          <div class="settings-block">
+            <h3>개인 API 키</h3>
+            <p id="key-help" class="field-help">입력한 키는 현재 페이지에서만 사용해요. 새로고침하면 다시 입력해주세요.</p>
+            <label class="field-label" for="gemini-key">Gemini API 키</label>
+            <input id="gemini-key" type="password" placeholder="Gemini를 사용할 때 입력" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="key-help">
+            <label class="field-label" for="elevenlabs-key">ElevenLabs API 키</label>
+            <input id="elevenlabs-key" type="password" placeholder="ElevenLabs 음성을 사용할 때 입력" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="key-help">
+          </div>
+          <div class="settings-block">
+            <h3>안내 음성</h3>
+            <label class="field-label" for="speech-provider">음성 방식</label>
+            <select id="speech-provider"><option value="native">브라우저 기본 음성</option><option value="elevenlabs" selected>ElevenLabs</option></select>
+            <label class="field-label" for="elevenlabs-voice">ElevenLabs 고정 음성</label>
+            <select id="elevenlabs-voice"><option value="female">기존 여자 음성</option><option value="male">기존 남자 음성</option></select>
+            <p class="field-help">로컬 AI는 기본 음성을 사용해요. ElevenLabs에 문제가 생겨도 기본 음성으로 이어서 안내해요.</p>
+          </div>
+          <div class="settings-block settings-actions">
+            <button id="save-settings" class="secondary" type="button">현재 페이지에 적용</button>
+            <button id="clear-keys" class="text-button" type="button">입력한 키 지우기</button>
+            <p id="settings-feedback" class="field-help" role="status" aria-atomic="true"></p>
+          </div>
+          <div class="settings-block local-preparation">
+            <h3>기기에서 실행하는 로컬 AI</h3>
+            <p class="field-help">최신 Chrome·Edge의 지원 기기에서 사용할 수 있어요. 처음에는 약 1.5GB의 모델 파일을 받고, 준비 후에는 이 기기에서 분석·번역해요. 지원 GPU와 충분한 메모리가 필요하며 로컬 번역 모델은 비상업적 용도에만 사용할 수 있어요.</p>
+            <button id="prepare-local" class="secondary" type="button">로컬 AI 준비</button>
+            <p id="local-progress" class="field-help" role="status" aria-atomic="true">아직 로컬 AI를 준비하지 않았어요.</p>
+          </div>
+          <div class="settings-block check-interval">
+            <label class="field-label" for="analysis-interval">상황 확인 간격</label>
+            <select id="analysis-interval"><option value="2" selected>최소 2초</option><option value="3">최소 3초</option><option value="5">최소 5초</option></select>
+            <p class="field-help">상황을 확인하는 간격이에요. 같은 안내를 이 간격마다 반복하지는 않아요.</p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <details class="settings-panel panel" style="margin-top:20px">
+      <summary><span class="settings-summary"><strong>흰지팡이 BLE 연결 · 선택</strong></span></summary>
+      <div class="settings-content"><div class="settings-block">
+        <p class="field-help">지원되는 Chrome 브라우저에서 HM-10 장치를 직접 선택해 연결할 수 있어요.</p>
+        <div class="controls" style="margin-top:12px"><button id="ble-connect" type="button">HM-10 연결</button><button id="ble-test" type="button" disabled>신호 시험</button><button id="ble-disconnect" type="button" disabled>연결 해제</button></div>
+        <label class="field-label"><input id="ble-notify" type="checkbox"> 새 통로 방해물 관측 시 보드에 신호 보내기</label>
+        <p id="ble-status" class="field-help" role="status">아직 연결하지 않았어요.</p>
+      </div></div>
+    </details>
+    <details class="connection-details panel">
+      <summary><span>연결 상태 보기</span><svg class="summary-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></summary>
+      <div class="connection-grid"><p><span>물체 감지</span><strong id="yolo-led">대기</strong></p><p><span>AI 설명</span><strong id="ai-led">꺼짐</strong></p><p><span>선택한 모델</span><strong id="provider">물체 감지만</strong></p></div>
+    </details>
+
+    <section id="install-help" class="install-help" aria-labelledby="install-title">
+      <span class="install-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="6" y="2" width="12" height="20" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M10 18h4m-2-6V6m-3 3 3 3 3-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <div><h2 id="install-title">홈 화면에서 더 빠르게 열기</h2><p>브라우저 메뉴의 <strong>홈 화면에 추가</strong>를 이용할 수 있어요. iPhone은 Safari의 공유 메뉴에서 추가해주세요.</p></div>
+      <button id="install-app" class="small-button" type="button" hidden>홈 화면에 추가</button>
+    </section>
+
+    <footer class="site-footer">
+      <p class="privacy">기본 물체 감지는 이 기기에서 처리해요. Gemini를 선택하면 분석할 사진이 Google로, ElevenLabs를 선택하면 안내 문장이 ElevenLabs로 전송돼요.</p>
+      <p class="scope-note">카메라로 보는 상황을 확인하는 보조 안내예요. 실제 거리나 안전한 이동 경로를 측정하지는 않아요.</p>
+      <a class="license-link" href="./MODEL_LICENSES.html">모델·라이선스 안내</a>
+      <span class="footer-brand" aria-hidden="true">길잡이 <span>·</span> 필요한 변화에 집중하세요.</span>
+    </footer>
+    <input id="ai-optin" type="checkbox" hidden disabled>
+  </main>
+
+  <dialog id="model-dialog" aria-labelledby="model-title" aria-describedby="model-description">
+    <form method="dialog" class="dialog-head"><div><p class="eyebrow">안내 방식</p><h2 id="model-title">어떻게 안내할까요?</h2></div><button class="dialog-close" aria-label="모델 선택 닫기" type="submit"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></form>
+    <p id="model-description" class="dialog-description">필요한 안내 방식을 골라주세요. 실행 중에도 바꿀 수 있어요.</p>
+    <div class="choices">
+      <button type="button" data-provider="none" aria-pressed="true"><span class="choice-icon" aria-hidden="true">01</span><span><strong>물체 감지만</strong><small>기기에서 주변 물체를 확인해요.</small></span><span class="choice-check" aria-hidden="true">✓</span></button>
+      <button type="button" data-provider="gemini" aria-pressed="false"><span class="choice-icon" aria-hidden="true">02</span><span><strong>Gemini</strong><small id="gemini-state">인터넷과 개인 API 키로 장면을 설명해요.</small></span><span class="choice-check" aria-hidden="true">✓</span></button>
+      <button type="button" data-provider="local" aria-pressed="false" disabled><span class="choice-icon" aria-hidden="true">03</span><span><strong>로컬 AI · 기기에서</strong><small id="local-state">이 브라우저의 지원 여부를 확인하고 있어요.</small></span><span class="choice-check" aria-hidden="true">✓</span></button>
+    </div>
+    <p id="mode-summary" class="dialog-note">온라인 AI와 음성 서비스에는 각 서비스의 사용량 요금이 발생할 수 있어요.</p>
+  </dialog>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

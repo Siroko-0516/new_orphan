@@ -16,6 +16,8 @@ dist/
 .wrangler/
 .dev.vars
 public/ort/
+public/local-ort/
+release-web/
 
 android/third_party/vulkan-headers/
 android/third_party/.vulkan-cache/

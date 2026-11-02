@@ -1,233 +1,265 @@
 import { BrowserYOLO } from './browser-yolo.js';
+import { WalkingSceneGate, NarrationMemory, PhotoHistory, parseWalkingReply, isFresh } from './walking-guidance.js';
+import { BrowserBle } from './browser-ble.js';
+import { BrowserSpeech } from './browser-speech.js';
+import { assessImages, normalizeKey, DEFAULT_GEMINI_MODEL } from './browser-ai.js';
+
 const $ = id => document.getElementById(id);
+const text = (id, value) => { if ($(id)?.textContent !== value) $(id).textContent = value; };
+const names = { person:'사람', bicycle:'자전거', car:'자동차', motorcycle:'오토바이', bus:'버스', truck:'트럭', dog:'개', cat:'고양이', chair:'의자', bench:'벤치', couch:'소파', 'traffic light':'신호등', 'stop sign':'정지 표지판', backpack:'가방', umbrella:'우산', 'dining table':'테이블', 'potted plant':'화분' };
 const detector = new BrowserYOLO();
-let stream, running = false, generation = 0, timer, lastAnalysis = 0, lastSpoken = '', lastSpeechAt = 0;
-let speechController, audio, audioUrl, activeUtterance, speechEpoch=0, lastLocalSpeechAt=0;
-let elevenlabsConfigured=false, lastScene='', lastSceneAt=0;
-let selectedProvider='none', selectionEpoch=0, currentAssessment;
-const capture = document.createElement('canvas');
-const ctx = $('overlay').getContext('2d');
-const names = {person:'사람', bicycle:'자전거', car:'자동차', motorcycle:'오토바이', bus:'버스', truck:'트럭', dog:'개', cat:'고양이', chair:'의자', bench:'벤치', 'traffic light':'신호등', 'stop sign':'정지 표지판', backpack:'가방', umbrella:'우산'};
-function notice(message) { $('notice').textContent = message; $('notice').hidden = !message; }
-async function api(path, body, signal) {
-  const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal});
-  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(typeof error.detail === 'string' ? error.detail : '요청을 처리하지 못했습니다.'); }
-  return response;
+const gate = new WalkingSceneGate();
+const memory = new NarrationMemory();
+const photos = new PhotoHistory({maxBytes:1_300_000});
+const canvas = document.createElement('canvas');
+const qualityCanvas = document.createElement('canvas'); qualityCanvas.width=24;qualityCanvas.height=24;
+const overlay = $('overlay').getContext('2d');
+let stream, source, timer, running=false, starting=false, generation=0, selectionEpoch=0, sequence=0;
+let lastAnalysis=0, analysisController, analysisBusy=false, analysisRetryAt=0, manualImage='', manualUnclear=false, local, localLoading;
+let selected='gemini', serverAvailable=false, serverGemini=false, serverEleven=false, model=DEFAULT_GEMINI_MODEL;
+let settings={geminiKey:'',elevenKey:'',voice:'female',speech:'elevenlabs'};
+let activeAnnouncement, installPrompt, wakeLock, cameraFailureCount=0;
+let bleEpisode=null,bleWriting=false;const bleSeen=new Set();
+const ble=new BrowserBle({status:(message,connected)=>{text('ble-status',message);$('ble-connect').disabled=connected||!ble.supported;$('ble-disconnect').disabled=!connected;$('ble-test').disabled=!connected;}});
+
+function notice(message='') { text('notice',message);$('notice').hidden=!message; }
+function result(message,title='상황 확인',urgency='notice') {
+  text('guidance',message);text('risk-title',title);text('risk-icon',urgency==='urgent'?'!':'◉');
+  $('risk').className=`risk ${urgency==='urgent'?'high':urgency==='none'?'unknown':'medium'}`;
 }
-function captureFrame() {
-  const v = $('video');
-  capture.width = Math.min(800, v.videoWidth);
-  capture.height = Math.round(capture.width * v.videoHeight / v.videoWidth);
-  capture.getContext('2d').drawImage(v, 0, 0, capture.width, capture.height);
+const speech = new BrowserSpeech({status:(state,message,provider)=>{
+  text('tts-led',({idle:'대기',loading:'음성 준비 중',speaking:'안내 중',error:'확인 필요'})[state]||state);
+  text('tts-feedback',message);text('tts-mode',provider==='elevenlabs'?'ElevenLabs':'기본 한국어 음성');
+}});
+
+async function localRuntime() {
+  if (!localLoading) localLoading=import('./local-ai.js').then(({BrowserLocalAI})=>{local=new BrowserLocalAI();return local;});
+  return localLoading;
+}
+function showSettings(message) {
+  $('settings-panel').open=true;
+  text('settings-feedback',message);
+  $('settings-panel').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function clearAnalysis() {
+  selectionEpoch++;analysisController?.abort();analysisController=null;analysisBusy=false;
+  speech.stop();activeAnnouncement=null;gate.reset();memory.reset();photos.reset();lastAnalysis=0;analysisRetryAt=0;
+}
+function chooseModel(provider, close=true) {
+  if(!['none','gemini','local'].includes(provider))return;
+  clearAnalysis();if(selected==='local'&&provider!=='local')local?.stop();selected=provider;
+  const label=({none:'물체 감지만',gemini:'Gemini',local:'로컬 AI'})[provider];
+  text('selected-model',label);text('provider',label);text('ai-led',provider==='none'?'꺼짐':'준비');
+  $('ai-optin').checked=provider!=='none';
+  for(const button of document.querySelectorAll('[data-provider]'))button.setAttribute('aria-pressed',String(button.dataset.provider===provider));
+  result(provider==='none'?'물체 위치는 화면에서 확인해요. 감지 결과를 음성으로 반복하지 않아요.':provider==='local'?'준비한 로컬 AI로 기기에서 사진을 분석해요. 음성은 기본 한국어 TTS를 사용해요.':'이전·최신 장면을 비교하고 필요한 변화가 있을 때 알려드려요.','분석 대기','none');
+  text('mode-summary',provider==='local'?'로컬 AI는 기본 한국어 음성만 사용해요.':'Gemini는 선택 음성을 사용하고, ElevenLabs 실패 시 기본 음성으로 바꿔요.');
+  $('analyze-photo').disabled=!manualImage||provider==='none';
+  if(close)$('model-dialog').close();
+}
+function saveSettings() {
+  try {
+    const next={geminiKey:normalizeKey($('gemini-key').value),elevenKey:normalizeKey($('elevenlabs-key').value),voice:$('elevenlabs-voice').value,speech:$('speech-provider').value};
+    clearAnalysis();settings=next;
+    text('settings-feedback','현재 페이지에 적용했어요. 키는 저장하지 않으며 새로고침하면 사라져요.');
+    updateConnection();
+  }catch(error){text('settings-feedback',error.message);}
+}
+function updateConnection() {
+  text('gemini-state',settings.geminiKey||serverGemini?'사진을 비교하고 필요한 변화만 알려줘요.':'설정에 개인 Gemini 키를 입력해주세요.');
+  text('tts-mode',selected==='local'||settings.speech==='native'?'기본 한국어 음성':'ElevenLabs → 기본 한국어 음성');
 }
 function draw(detections) {
-  const canvas = $('overlay'), video = $('video');
-  canvas.width = video.clientWidth; canvas.height = video.clientHeight;
-  const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-  const w = video.videoWidth * scale, h = video.videoHeight * scale;
-  const ox = (canvas.width-w)/2, oy=(canvas.height-h)/2;
-  ctx.font = '12px system-ui'; ctx.lineWidth = 2;
-  for (const d of detections) {
-    const [x1,y1,x2,y2] = d.box, label = `${names[d.label] || d.label} ${Math.round(d.confidence*100)}%`;
-    ctx.strokeStyle = '#c7eb8a'; ctx.fillStyle = '#c7eb8a';
-    ctx.strokeRect(ox+x1*w,oy+y1*h,(x2-x1)*w,(y2-y1)*h);
-    const y = Math.max(18, oy+y1*h);
-    ctx.fillRect(ox+x1*w,y-18,ctx.measureText(label).width+12,18);
-    ctx.fillStyle='#20351c';ctx.fillText(label,ox+x1*w+6,y-5);
-  }
-  $('count').textContent = `${detections.length}개`;
-  $('objects').replaceChildren();
-  if (!detections.length) { const p = document.createElement('p'); p.className='empty'; p.textContent='현재 감지된 물체가 없습니다.'; $('objects').append(p); }
-  for (const d of detections) {const row=document.createElement('div'); row.className='object'; const label=document.createElement('span'),score=document.createElement('span');label.textContent=names[d.label]||d.label;score.textContent=`${Math.round(d.confidence*100)}%`;row.append(label,score);$('objects').append(row);}
+  const element=source;
+  const sw=element?.videoWidth||element?.naturalWidth||canvas.width, sh=element?.videoHeight||element?.naturalHeight||canvas.height;
+  const target=$('overlay');target.width=target.clientWidth;target.height=target.clientHeight;
+  const scale=Math.min(target.width/sw,target.height/sh),w=sw*scale,h=sh*scale,ox=(target.width-w)/2,oy=(target.height-h)/2;
+  overlay.font='12px system-ui';overlay.lineWidth=2;
+  for(const item of detections){const [x1,y1,x2,y2]=item.box;overlay.strokeStyle='#c7eb8a';overlay.fillStyle='#c7eb8a';overlay.strokeRect(ox+x1*w,oy+y1*h,(x2-x1)*w,(y2-y1)*h);overlay.fillText(names[item.label]||item.label,ox+x1*w+3,Math.max(15,oy+y1*h-5));}
+  text('count',`${detections.length}개`);$('objects').replaceChildren();
+  if(!detections.length){const row=document.createElement('p');row.className='empty';row.textContent='현재 감지 정보가 없어요. 통로가 안전하다는 뜻은 아니에요.';$('objects').append(row);}
+  for(const item of detections.slice(0,20)){const row=document.createElement('div');row.className='object';const label=document.createElement('span'),confidence=document.createElement('span');label.textContent=names[item.label]||item.label;confidence.textContent=`${Math.round(item.confidence*100)}%`;row.append(label,confidence);$('objects').append(row);}
 }
-function cancelSpeech() {
-  speechEpoch++;
-  speechController?.abort();
-  speechController=null;
-  if (audio) { audio.pause(); audio = null; }
-  if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; }
-  window.speechSynthesis?.cancel();
-  activeUtterance=null;
+function captureFrame() {
+  const width=source?.videoWidth||source?.naturalWidth, height=source?.videoHeight||source?.naturalHeight;
+  if(!width||!height)return false;
+  canvas.width=Math.min(width,640);canvas.height=Math.round(canvas.width*height/width);
+  canvas.getContext('2d').drawImage(source,0,0,canvas.width,canvas.height);return true;
 }
-function nativeSpeak(text, reason='') {
-  if (!('speechSynthesis' in window)) { $('tts-led').textContent='미지원';notice('이 브라우저는 기본 음성을 지원하지 않습니다. 화면의 안내를 확인하세요.');return; }
-  const utterance=new SpeechSynthesisUtterance(text);utterance.lang='ko-KR';utterance.rate=1;
-  activeUtterance=utterance;
-  const epoch=speechEpoch;
-  const voices=speechSynthesis.getVoices(); utterance.voice=voices.find(v=>v.lang.startsWith('ko'))||null;
-  $('tts-led').textContent='안내 중';$('tts-mode').textContent=reason?'기본 TTS · ElevenLabs 실패':'브라우저 기본 TTS';
-  $('tts-feedback').textContent=reason||'기기의 한국어 음성으로 재생합니다.';
-  utterance.onend=()=>{if(epoch!==speechEpoch)return;activeUtterance=null;$('tts-led').textContent='대기';};
-  utterance.onerror=event=>{
-    if(epoch!==speechEpoch)return;activeUtterance=null;
-    if(['canceled','interrupted'].includes(event.error))return;
-    $('tts-led').textContent='실패';
-    $('tts-feedback').textContent=event.error==='not-allowed'?'브라우저가 자동 음성을 차단했습니다. 기본 음성 테스트 버튼을 직접 눌러주세요.':'기본 음성을 재생하지 못했습니다. 기기 음량과 한국어 음성 설치를 확인하세요.';
-  };
-  speechSynthesis.speak(utterance);
+function unclearFrame(frame=canvas) {
+  const q=qualityCanvas.getContext('2d',{willReadFrequently:true});q.drawImage(frame,0,0,24,24);
+  const pixels=q.getImageData(0,0,24,24).data;let sum=0,square=0;
+  for(let i=0;i<pixels.length;i+=4){const gray=.299*pixels[i]+.587*pixels[i+1]+.114*pixels[i+2];sum+=gray;square+=gray*gray;}
+  const n=pixels.length/4,mean=sum/n,variance=square/n-mean*mean;
+  return mean<10||mean>247||variance<20;
 }
-async function speak(text) {
-  if (!$('voice').checked) return;
-  cancelSpeech();
-  if(!elevenlabsConfigured){nativeSpeak(text);return;}
-  const controller = new AbortController();speechController=controller;
-  const epoch=speechEpoch;
-  $('tts-led').textContent='음성 생성 중';$('tts-feedback').textContent='ElevenLabs 음성을 요청하고 있습니다.';
-  const timeout=setTimeout(()=>controller.abort('timeout'),12000);
-  let fellBack=false;
+function usefulLocalCaption(english, decision) {
+  if(!english||/^\s*(?:none|no (?:visible )?(?:obstacle|obstruction))/i.test(english))return false;
+  const hazard=/\b(?:stairs?|curb|pothole|hole|overhead|hanging|protruding)\b/i.test(english);
+  const blockage=/\b(?:blocks?|blocked|blocking|obstruct\w*|walkway|pathway|path ahead|doorway)\b/i.test(english);
+  const current=decision.context.tracks.some(t=>t.currently_visible&&t.corridor==='potential_path_cue');
+  return hazard||blockage&&current;
+}
+async function narrate(reply,decision,session,selection,manual=false) {
+  if(!$('voice').checked||!reply.speak)return;
+  const reservation=manual?null:memory.reserve(decision.episode,decision.stateKey,reply);
+  if(!manual&&!reservation)return;
+  const announcement={started:false,decision,session,selection};activeAnnouncement=announcement;
+  const valid=()=>activeAnnouncement===announcement&&session===generation&&selection===selectionEpoch&&$('voice').checked&&(manual||running&&gate.sameContext(decision)&&Date.now()-decision.capturedAt<=(announcement.started?12000:5000));
+  const outcome=await speech.speak(reply.message,{
+    cloud:selected==='gemini'&&settings.speech==='elevenlabs',elevenKey:settings.elevenKey,voice:settings.voice,
+    server:serverAvailable&&(serverEleven||!!settings.elevenKey),manual,valid,
+    remainingMs:manual?Infinity:()=>Math.max(0,(announcement.started?12000:5000)-(Date.now()-decision.capturedAt)),
+    onStart:()=>{announcement.started=true;if(reservation)memory.commitReservation(reservation);},
+  });
+  if(reservation&&!outcome.started)memory.release(reservation);
+  if(activeAnnouncement===announcement)activeAnnouncement=null;
+}
+async function analyze(image,decision,session,{manual=false}={}) {
+  const selection=selectionEpoch,provider=selected;
+  if(provider==='none')return;
+  const controller=new AbortController();analysisController=controller;analysisBusy=true;
+  const started=Date.now();lastAnalysis=started;text('ai-led','분석 중');
   try {
-    const response=await api('/api/speech',{text},controller.signal);
-    const blob=await response.blob();
-    if(controller.signal.aborted) return;
-    audioUrl=URL.createObjectURL(blob);audio=new Audio(audioUrl);
-    $('tts-mode').textContent='ElevenLabs';$('tts-led').textContent='안내 중';$('tts-feedback').textContent='ElevenLabs 음성을 재생합니다.';
-    const fallback=message=>{
-      if(epoch!==speechEpoch||controller.signal.aborted||fellBack)return;
-      fellBack=true;
-      audio?.pause();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;audio=null;
-      nativeSpeak(text,message);
-    };
-    audio.onerror=()=>fallback('받은 음성을 재생하지 못해 기본 TTS로 전환했습니다.');
-    audio.onended=()=>{if(epoch!==speechEpoch)return;$('tts-led').textContent='대기';if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;};
-    await audio.play();
-  } catch (error) {
-    if(fellBack)return;
-    if(controller.signal.aborted && controller.signal.reason !== 'timeout') return;
-    if(epoch!==speechEpoch)return;
-    audio?.pause();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=null;audio=null;
-    nativeSpeak(text,controller.signal.reason==='timeout'?'ElevenLabs 응답이 늦어 기본 TTS로 전환했습니다.':`${error.name==='NotAllowedError'?'브라우저가 오디오 자동 재생을 차단했습니다.':error.message} 기본 TTS로 전환합니다.`);
-  } finally {clearTimeout(timeout);if(speechController===controller)speechController=null;}
-}
-let aiConfigured=false, assessmentBusy=false;
-function alertUser(text, immediate=false) {
-  if(!$('voice').checked)return;
-  const now=Date.now();
-  if(immediate){
-    if(activeUtterance||speechController||audio&&!audio.paused)return;
-    if(now-lastLocalSpeechAt<12000||(text===lastSpoken&&now-lastLocalSpeechAt<30000))return;
-    lastLocalSpeechAt=now;lastSpoken=text;cancelSpeech();nativeSpeak(text);return;
-  }
-  if(now-lastSpeechAt<12000 || (text===lastSpoken && now-lastSpeechAt<30000))return;
-  lastSpoken=text;lastSpeechAt=now;
-  void speak(text);
-}
-function localAlert(detections) {
-  const important=new Set(['person','bicycle','car','motorcycle','bus','truck','dog','chair','bench']);
-  const obstacle=detections.find(d=>important.has(d.label)&&d.box[0]<0.6&&d.box[2]>0.4&&(d.box[2]-d.box[0])*(d.box[3]-d.box[1])>0.12);
-  $('local-alert').hidden=!obstacle;
-  if(obstacle){
-    const message=`화면 중앙에 ${names[obstacle.label]||obstacle.label} 감지. 주변을 확인하세요.`;
-    $('local-alert').textContent=`빠른 물체 알림 · ${message}`;
-    alertUser(message,true);
-  }
-}
-async function assessScene(image, detections, token) {
-  const selection=selectionEpoch, provider=selectedProvider;
-  const controller=new AbortController();currentAssessment=controller;
-  assessmentBusy=true;
-  try {
-      lastAnalysis=Date.now();$('ai-led').textContent='분석 중';
-      try {
-        const verdict=await (await api('/api/assess',{image,detections,provider},AbortSignal.any([controller.signal,AbortSignal.timeout(35000)]))).json();
-        if (!running || token!==generation || selection!==selectionEpoch || !$('ai-optin').checked) return;
-        $('risk').className=`risk ${verdict.level}`;
-        $('risk-title').textContent=({low:'특이 위험 미감지',medium:'주변을 살펴주세요',high:'주의가 필요합니다',unknown:'판단이 어렵습니다'})[verdict.level];
-        $('risk-icon').textContent=verdict.level==='high'?'⚠':'◉';$('guidance').textContent=verdict.message;
-        $('updated').textContent=`${new Date().toLocaleTimeString('ko-KR')} 분석 · 단일 장면 기준`;$('ai-led').textContent='연결됨';
-        alertUser(verdict.message);
-      } catch(error) {
-        if (!running || token!==generation || selection!==selectionEpoch || !$('ai-optin').checked) return;
-        $('ai-led').textContent='연결 실패';$('risk').className='risk unknown';$('risk-title').textContent='현재 판단 불가';$('guidance').textContent=error.message;
-      }
-  } finally { if(currentAssessment===controller){currentAssessment=null;assessmentBusy=false;} }
-}
-async function loop(token) {
-  if (!running || token!==generation) return;
-  const loopStart=performance.now();
-  try {
-    captureFrame();
-    const result=await detector.detect(capture);
-    if (!running || token!==generation) return;
-    draw(result.detections);$('yolo-led').textContent=`${result.ms}ms`;
-    $('camera-state').textContent=`기기 내 감지 · ${result.backend}`;
-    localAlert(result.detections);
-    const signature=[...new Set(result.detections.map(d=>`${d.label}:${d.box.map(v=>Math.round(v*4)).join('.')}`))].sort().join(',');
-    if(aiConfigured && $('ai-optin').checked && !assessmentBusy && Date.now()-lastAnalysis>10000 && (signature!==lastScene || Date.now()-lastSceneAt>30000)) {
-      lastScene=signature;lastSceneAt=Date.now();
-      void assessScene(capture.toDataURL('image/jpeg',0.65), result.detections, token);
+    let reply,timing='';
+    if(manual&&manualUnclear){reply={valid:true,speak:true,message:'사진이 단색이거나 어두워 주변 내용을 구분하기 어려워요.',urgency:'notice'};}
+    else if(provider==='gemini') {
+      if(!settings.geminiKey&&!serverGemini){showSettings('개인 Gemini API 키를 입력하고 적용해주세요.');text('ai-led','키 설정 필요');analysisRetryAt=Infinity;return;}
+      const frames=manual?[{image,capturedAt:started}]:photos.frames(decision.capturedAt);
+      reply=await assessImages({images:frames.map(p=>p.image),apiKey:settings.geminiKey,model,server:serverAvailable,context:decision?.context||{},previousSpoken:manual?'':memory.previous(decision.episode),question:manual?$('photo-question').value:'',capturedAt:manual?started:decision.capturedAt,manual,signal:controller.signal});
+    }else{
+      const engine=await localRuntime();
+      if(!engine.ready){showSettings('로컬 AI 준비 버튼으로 모델을 먼저 준비해주세요.');text('ai-led','로컬 준비 필요');analysisRetryAt=Infinity;return;}
+      const value=await engine.describe(image,{signal:controller.signal,question:manual?$('photo-question').value:'',walking:!manual});
+      timing=` · 이미지 ${(value.timings.captionMs/1000).toFixed(1)}초 · 번역 ${(value.timings.translationMs/1000).toFixed(1)}초 · WebGPU`;
+      if(!manual&&(value.silent||!usefulLocalCaption(value.english,decision)))reply={valid:true,speak:false,message:'',urgency:'none'};
+      else reply=parseWalkingReply(JSON.stringify({speak:true,message:value.message,urgency:'notice'}),{manual});
+      if(!reply.valid)throw new Error('한국어 설명을 확인하지 못해 음성을 보류했어요.');
     }
-  } catch(error) {if(running && token===generation){notice(error.message);$('yolo-led').textContent='감지 실패';}}
-  if(running && token===generation)timer=setTimeout(()=>loop(token),Math.max(0,200-(performance.now()-loopStart)));
+    if(controller.signal.aborted||session!==generation||selection!==selectionEpoch||!manual&&!running)return;
+    if(!manual){gate.accepted(decision);photos.markReviewed(decision.capturedAt);}
+    const elapsed=((Date.now()-started)/1000).toFixed(1);
+    text('updated',`${new Date().toLocaleTimeString('ko-KR')} · 분석 ${elapsed}초${timing}`);
+    if(!manual&&!isFresh(decision.capturedAt)) {text('ai-led','이전 결과 음성 생략');text('camera-feedback','분석이 늦어 지난 장면의 음성은 읽지 않고 최신 사진을 확인해요.');return;}
+    if(!manual&&!gate.sameContext(decision)){text('ai-led','상황 변화 · 다음 사진 대기');return;}
+    if(!reply.speak){text('ai-led','조용히 확인 중');result('새로 안내할 내용이 없어 조용히 확인하고 있어요.','분석 중 · 새 안내 없음','none');return;}
+    if(!manual&&!memory.eligible(decision.episode,decision.stateKey,reply)){text('ai-led','같은 안내 반복 생략');return;}
+    result(reply.message,manual?'사진 설명':reply.urgency==='urgent'?'주의가 필요한 변화':'새로운 상황 안내',reply.urgency);
+    text('ai-led','확인 완료');void narrate(reply,decision,session,selection,manual);
+  }catch(error){
+    if(controller.signal.aborted||session!==generation||selection!==selectionEpoch)return;
+    text('ai-led','확인 필요');notice(error.name==='TimeoutError'?'AI 분석이 지연됐어요. 최신 장면으로 다시 확인해요.':error.message);
+    analysisRetryAt=Date.now()+10000;
+  }finally{if(analysisController===controller){analysisController=null;analysisBusy=false;}if(manual)$('analyze-photo').disabled=!manualImage;}
 }
-function stop() {
-  currentAssessment?.abort();currentAssessment=null;assessmentBusy=false;
-  running=false;generation++;clearTimeout(timer);stream?.getTracks().forEach(t=>t.stop());stream=null;
-  $('video').srcObject=null;$('video').classList.remove('active');$('placeholder').hidden=false;
-  ctx.clearRect(0,0,$('overlay').width,$('overlay').height);$('start').disabled=false;$('stop').disabled=true;
-  $('camera-state').textContent='중지됨';$('yolo-led').textContent='대기';$('ai-led').textContent='대기';
-  $('risk').className='risk unknown';$('risk-title').textContent='안내 중지됨';$('guidance').textContent='다시 시작하면 주변 상황을 분석합니다.';
-  $('updated').textContent='';
-  $('local-alert').hidden=true;$('objects').replaceChildren();$('count').textContent='0개';
-  cancelSpeech();$('tts-led').textContent='대기';
-}
-$('start').onclick=async()=>{
-  const token=++generation;running=true;
-  $('start').disabled=true;$('stop').disabled=false;notice('');
+async function loop(session) {
+  if(!running||session!==generation)return;
+  const started=performance.now();
   try {
-    if(!navigator.mediaDevices?.getUserMedia)throw new Error('카메라를 사용하려면 HTTPS 또는 localhost에서 접속하세요.');
-    $('camera-state').textContent='YOLO 모델 로딩 중';$('yolo-led').textContent='로딩 중';
-    notice('첫 실행은 모델과 실행 파일을 내려받아 시간이 걸릴 수 있습니다. 이후에는 브라우저 캐시를 사용합니다.');
-    await detector.load();
-    if(!running||token!==generation)return;
-    const acquired=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:960}},audio:false});
-    if(!running||token!==generation){acquired.getTracks().forEach(t=>t.stop());return;}
-    stream=acquired;
-    const video=$('video');video.srcObject=stream;await video.play();
-    if(!running||token!==generation)return;
-    video.classList.add('active');$('placeholder').hidden=true;$('stop').disabled=false;$('camera-state').textContent='실시간 감지 중';
-    lastAnalysis=0;lastSceneAt=0;lastSpoken='';lastSpeechAt=0;lastLocalSpeechAt=0;void loop(token);
-    notice(!aiConfigured?'기기 내 YOLO 감지와 빠른 물체 알림을 사용합니다. AI 장면 판단은 서버 키 설정 후 켤 수 있습니다.':'');
-  }catch(error){if(token===generation){stop();notice(error.name==='NotAllowedError'?'카메라 권한이 필요합니다. 브라우저 설정에서 허용한 후 다시 시작하세요.':error.message);}}
-};
-$('stop').onclick=stop;$('voice').onchange=()=>{if(!$('voice').checked)cancelSpeech();};
-$('test-speech').onclick=()=>{void speak('길잡이 음성 안내입니다. 주변을 살피며 이동하세요.');};
-$('test-native').onclick=()=>{
-  if(!$('voice').checked){$('tts-feedback').textContent='먼저 음성 안내를 켜주세요.';return;}
-  cancelSpeech();nativeSpeak('기본 음성 테스트입니다. 소리가 들리면 정상입니다.');
-};
-window.speechSynthesis?.getVoices();
-$('ai-optin').onchange=()=>{
-  lastAnalysis=0;lastSceneAt=0;
-  if(!$('ai-optin').checked){$('ai-led').textContent='꺼짐';$('risk').className='risk unknown';$('risk-title').textContent='AI 설명 꺼짐';$('guidance').textContent='물체 감지와 빠른 물체 알림은 기기에서 계속됩니다.';cancelSpeech();}
-};
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&running)stop();});
-window.addEventListener('pagehide',stop);
-function chooseModel(provider){
-  selectionEpoch++;currentAssessment?.abort();currentAssessment=null;assessmentBusy=false;cancelSpeech();
-  selectedProvider=provider;
-  const label=({none:'물체 감지만',gemini:'Gemini',openai:'GPT'})[provider];
-  $('selected-model').textContent=label;$('ai-optin').checked=provider!=='none';
-  lastAnalysis=0;lastSceneAt=0;$('ai-led').textContent=provider==='none'?'꺼짐':'준비';
-  $('risk').className='risk unknown';$('risk-title').textContent=provider==='none'?'물체 감지':'분석 대기';
-  $('guidance').textContent=provider==='none'?'기기 내 감지와 물체 알림을 사용합니다.':`${label}로 장면을 분석합니다.`;
-  $('updated').textContent='';
-  for(const button of document.querySelectorAll('[data-provider]'))button.setAttribute('aria-pressed',String(button.dataset.provider===provider));
-  $('model-dialog').close();
+    if(!captureFrame()){timer=setTimeout(()=>loop(session),200);return;}
+    const capturedAt=Date.now(),image=canvas.toDataURL('image/jpeg',.72);
+    const detections=(await detector.detect(canvas)).detections;
+    if(!running||session!==generation)return;
+    cameraFailureCount=0;draw(detections);text('yolo-led',`${Math.round(performance.now()-started)}ms · 기기 내 감지`);
+    gate.observe(++sequence,detections,capturedAt);photos.add(image,capturedAt);
+    const decision=gate.decision(sequence)||gate.review(sequence);
+    if(ble.connected&&$('ble-notify').checked&&!bleWriting){if(bleEpisode!==decision.episode){bleEpisode=decision.episode;bleSeen.clear();}const cues=decision.stateKey.split('|').filter(cue=>cue!=='no_confirmed_path_cues'&&!bleSeen.has(cue));if(cues.length){bleWriting=true;void ble.send('OBSTACLE\n').then(sent=>{if(sent&&session===generation)for(const cue of cues)bleSeen.add(cue);}).finally(()=>bleWriting=false);}}
+    if(selected!=='none'&&!analysisBusy&&Date.now()>=analysisRetryAt&&Date.now()-lastAnalysis>=Number($('analysis-interval').value)*1000){
+      if(unclearFrame()){text('ai-led','영상 확인 어려움');result('영상이 단색이거나 어두워 주변을 구분하기 어려워요.','카메라 방향을 확인해주세요.','none');lastAnalysis=Date.now();}
+      else void analyze(image,decision,session);
+    }
+  }catch(error){
+    if(running&&session===generation){
+      notice(error.name==='SecurityError'?'ESP 영상의 교차 출처 접근이 차단됐어요. 카메라 서버의 CORS·HTTPS 설정이 필요해요.':error.message);
+      if(++cameraFailureCount>=3||error.name==='SecurityError'){stop('카메라 연결을 확인해주세요.');return;}
+    }
+  }
+  if(running&&session===generation)timer=setTimeout(()=>loop(session),Math.max(50,250-(performance.now()-started)));
 }
+async function start() {
+  if(running||starting)return;
+  const session=++generation;running=true;starting=true;clearAnalysis();
+  $('start').disabled=true;$('stop').disabled=false;$('camera-source').disabled=true;bleSeen.clear();bleEpisode=null;notice('');
+  $('photo-preview').hidden=true;$('esp-preview').hidden=true;
+  try {
+    text('camera-state','카메라 준비 중');
+    if($('camera-source').value==='esp'){
+      const url=new URL($('esp-url').value);if(!['http:','https:'].includes(url.protocol))throw new Error('HTTP 또는 HTTPS 카메라 주소를 입력해주세요.');
+      if(location.protocol==='https:'&&url.protocol==='http:')throw new Error('HTTPS 웹사이트에서는 HTTP ESP 영상을 연결할 수 없어요. HTTPS·CORS를 지원하는 카메라 연결이 필요해요. 휴대폰 카메라는 바로 사용할 수 있어요.');
+      const esp=$('esp-preview');source=esp;esp.crossOrigin='anonymous';
+      await new Promise((resolve,reject)=>{const id=setTimeout(()=>reject(new Error('ESP 영상을 받지 못했어요. 주소와 같은 Wi-Fi 연결을 확인해주세요.')),12000);esp.onload=()=>{clearTimeout(id);resolve();};esp.onerror=()=>{clearTimeout(id);reject(new Error('ESP 영상 연결을 확인해주세요.'));};esp.src=url.href;});
+      if(!running||session!==generation)return;esp.hidden=false;
+    }else{
+      if(!navigator.mediaDevices?.getUserMedia)throw new Error('HTTPS 주소 또는 localhost에서 카메라를 사용할 수 있어요.');
+      const acquired=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:$('camera-source').value==='front'?'user':'environment'},width:{ideal:960}},audio:false});
+      if(!running||session!==generation){acquired.getTracks().forEach(t=>t.stop());return;}
+      stream=acquired;const video=$('video');source=video;video.srcObject=stream;await video.play();if(!running||session!==generation)return;video.classList.add('active');
+    }
+    if(!running||session!==generation)return;
+    $('placeholder').hidden=true;text('camera-state','카메라 연결됨');text('camera-feedback','이 탭에서 주변을 확인해요. 화면을 잠그거나 다른 탭으로 이동하면 중지해요.');
+    text('yolo-led','모델 준비 중');await detector.load();
+    if(!running||session!==generation)return;
+    try{wakeLock=await navigator.wakeLock?.request('screen');}catch{/* Optional device support. */}
+    void loop(session);
+  }catch(error){if(session===generation){stop('카메라 연결 전');notice(error.name==='NotAllowedError'?'카메라 사용을 허용한 뒤 다시 시작해주세요.':error.message);}}
+  finally{if(session===generation)starting=false;}
+}
+function stop(message='안내를 중지했어요.') {
+  running=false;starting=false;generation++;clearTimeout(timer);clearAnalysis();
+  local?.stop();stream?.getTracks().forEach(track=>track.stop());stream=null;
+  $('video').pause();$('video').srcObject=null;$('video').classList.remove('active');
+  $('esp-preview').removeAttribute('src');$('esp-preview').hidden=true;source=null;
+  wakeLock?.release().catch(()=>{});wakeLock=null;
+  $('placeholder').hidden=!!manualImage;$('photo-preview').hidden=!manualImage;
+  $('start').disabled=false;$('stop').disabled=true;$('camera-source').disabled=false;
+  result(message,'안내 중지','none');text('updated','');text('camera-state',message);text('camera-feedback','사용할 카메라를 고른 뒤 시작해주세요.');text('ai-led','중지됨');text('yolo-led','대기');
+  $('overlay').getContext('2d').clearRect(0,0,$('overlay').width,$('overlay').height);
+  $('objects').replaceChildren();text('count','0개');
+}
+
+$('start').onclick=start;$('stop').onclick=()=>stop();
 $('choose-model').onclick=()=>$('model-dialog').showModal();
 for(const button of document.querySelectorAll('[data-provider]'))button.onclick=()=>chooseModel(button.dataset.provider);
-document.querySelector('[data-provider="none"]').setAttribute('aria-pressed','true');
-fetch('/api/status').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(s=>{
-  const providers=s.providers||{[s.provider]:s.ai_configured};
-  aiConfigured=!!(providers.gemini||providers.openai);elevenlabsConfigured=s.elevenlabs_configured;
-  $('ai-optin').disabled=!aiConfigured;
-  for(const provider of ['gemini','openai']){
-    document.querySelector(`[data-provider="${provider}"]`).disabled=!providers[provider];
-    $(provider==='gemini'?'gemini-state':'openai-state').textContent=providers[provider]?`${s.models?.[provider]||'서버 모델'} · 온라인`:'API 키 미설정';
-  }
-  $('provider').textContent=aiConfigured?'온라인 모델 사용 가능':'기기 내 모드';
-  $('tts-mode').textContent=elevenlabsConfigured?'ElevenLabs → 기본 TTS':'브라우저 기본 TTS';
-}).catch(()=>{
-  $('ai-optin').disabled=true;$('provider').textContent='서버 미연결';
-  $('gemini-state').textContent='서버 미연결';$('openai-state').textContent='서버 미연결';
-});
+$('camera-source').onchange=()=>{$('esp-settings').hidden=$('camera-source').value!=='esp';};
+$('save-settings').onclick=saveSettings;
+$('clear-keys').onclick=()=>{$('gemini-key').value='';$('elevenlabs-key').value='';settings.geminiKey='';settings.elevenKey='';clearAnalysis();text('settings-feedback','현재 페이지의 키를 지웠어요.');updateConnection();};
+$('voice').onchange=()=>{if(!$('voice').checked){speech.stop();activeAnnouncement=null;} $('guidance').setAttribute('aria-live',$('voice').checked?'off':'polite');};
+$('test-native').onclick=()=>{activeAnnouncement=null;void speech.testNative();};
+$('test-speech').onclick=()=>{activeAnnouncement=null;void speech.speak('길잡이 음성 안내입니다. 필요한 변화가 있을 때 알려드려요.',{cloud:selected==='gemini'&&settings.speech==='elevenlabs',elevenKey:settings.elevenKey,voice:settings.voice,server:serverAvailable&&(serverEleven||!!settings.elevenKey),manual:true});};
+$('prepare-local').onclick=async()=>{
+  $('prepare-local').disabled=true;
+  try{const engine=await localRuntime();await engine.prepare(progress=>text('local-progress',typeof progress==='string'?progress:`${progress.stage||'준비 중'} · ${Math.min(100,Math.round((progress.overallLoaded||0)/(progress.overallTotal||1)*100))}% · ${(Number(progress.overallLoaded||0)/1e6).toFixed(0)}MB`));text('local-progress','로컬 AI와 한국어 번역을 준비했어요. 사진은 기기에서 처리해요.');analysisRetryAt=0;lastAnalysis=0;}
+  catch(error){text('local-progress',error.message);}
+  finally{$('prepare-local').disabled=false;}
+};
+$('photo-input').onchange=async()=>{
+  const file=$('photo-input').files?.[0];if(!file)return;
+  stop('사진 확인 중');manualImage='';$('analyze-photo').disabled=true;
+  try{
+    if(file.size>25*1024*1024)throw new Error('25MB 이하의 사진을 선택해주세요.');
+    const image=await createImageBitmap(file);if(!image.width||!image.height){image.close();throw new Error('사진을 읽지 못했어요.');}
+    const photo=document.createElement('canvas'),scale=Math.min(1,800/Math.max(image.width,image.height));photo.width=Math.max(1,Math.round(image.width*scale));photo.height=Math.max(1,Math.round(image.height*scale));photo.getContext('2d').drawImage(image,0,0,photo.width,photo.height);image.close();
+    manualUnclear=unclearFrame(photo);manualImage=photo.toDataURL('image/jpeg',.8);$('photo-preview').src=manualImage;$('photo-preview').hidden=false;$('placeholder').hidden=true;$('analyze-photo').disabled=selected==='none';
+    text('camera-state','사진 준비됨');notice('');
+  }catch(error){notice(error.message||'사진을 읽지 못했어요. 다른 사진을 선택해주세요.');}
+};
+$('analyze-photo').onclick=()=>{if(!manualImage||analysisBusy)return;if(running)stop('사진 설명으로 전환했어요.');$('analyze-photo').disabled=true;void analyze(manualImage,null,generation,{manual:true});};
+window.addEventListener('pagehide',()=>{stop();ble.disconnect();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&(running||analysisBusy))stop('다른 화면으로 이동해 중지했어요.');});
+window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;$('install-app').hidden=false;});
+$('install-app').onclick=async()=>{if(installPrompt){await installPrompt.prompt();installPrompt=null;$('install-app').hidden=true;}};
+
+$('ble-connect').onclick=()=>{void ble.connect();};$('ble-disconnect').onclick=()=>ble.disconnect();$('ble-test').onclick=()=>{void ble.send('TEST\n');};
+$('ble-connect').disabled=!ble.supported;if(!ble.supported)text('ble-status','이 브라우저에서는 BLE 연결을 지원하지 않아요. 카메라·AI 안내는 사용할 수 있어요.');
+chooseModel('gemini',false);$('guidance').setAttribute('aria-live','off');
+fetch(new URL('api/status',document.baseURI)).then(response=>{if(!response.ok)throw new Error();return response.json();}).then(status=>{
+  serverAvailable=status.walking_protocol===1;serverGemini=!!status.providers?.gemini;serverEleven=!!status.elevenlabs_configured;
+  model=status.models?.gemini||DEFAULT_GEMINI_MODEL;updateConnection();
+}).catch(()=>{serverAvailable=false;updateConnection();});
+localRuntime().then(async engine=>{
+  const support=await engine.constructor.supported();const supported=support.supported;
+  document.querySelector('[data-provider="local"]').disabled=!supported;$('prepare-local').disabled=!supported;
+  text('local-state',supported?'지원 기기 · 처음 모델 준비 후 사용할 수 있어요.':support.reason||'이 브라우저에서는 기기 내 AI를 사용할 수 없어요.');
+  if(!supported)text('local-progress',support.reason||'WebGPU를 지원하는 최신 Chrome·Edge가 필요해요.');
+}).catch(()=>{text('local-state','로컬 AI 실행 파일을 불러오지 못했어요. 새로고침해주세요.');});
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register(new URL('sw.js',document.baseURI)).catch(()=>{}));

@@ -1,0 +1,196 @@
+{
+  "release": "web-v1.0.0",
+  "validated_at_seoul": "2026-11-02",
+  "javascript_tests": {
+    "passed": 121,
+    "failed": 0
+  },
+  "python_tests": {
+    "passed": 59,
+    "failed": 0
+  },
+  "production_build_passed": true,
+  "cloudflare_worker_build_passed": true,
+  "cloudflare_25_mib_per_asset_limit_passed": true,
+  "browser_integration": {
+    "passed": true,
+    "browser": "Chromium 154, headless",
+    "fixture": "Public Ultralytics bus.jpg as fake camera video; real ONNX/WASM YOLO",
+    "ai_and_audio_events_mocked": true,
+    "physical_speaker_verified": false,
+    "scenarios": [
+      {
+        "scenario": "camera",
+        "speech_api_calls": 0,
+        "direct_calls": 0,
+        "mocked_eleven_calls": 0,
+        "key_header_verified": false,
+        "key_absent_from_url_and_body": true,
+        "front_requested": true,
+        "worker_frames": 6,
+        "max_positive_detections": 5,
+        "mobile_no_overflow": true,
+        "simulated_native_utterances": 0
+      },
+      {
+        "scenario": "detector",
+        "speech_api_calls": 0,
+        "direct_calls": 0,
+        "mocked_eleven_calls": 0,
+        "key_header_verified": false,
+        "key_absent_from_url_and_body": true,
+        "worker_frames": 29,
+        "max_positive_detections": 5,
+        "no_raw_detector_tts": true,
+        "simulated_native_utterances": 0
+      },
+      {
+        "scenario": "repeat",
+        "speech_api_calls": 0,
+        "direct_calls": 0,
+        "mocked_eleven_calls": 0,
+        "key_header_verified": false,
+        "key_absent_from_url_and_body": true,
+        "worker_frames": 42,
+        "same_situation_not_repeated": true,
+        "simulated_native_utterances": 1
+      },
+      {
+        "scenario": "stale",
+        "speech_api_calls": 0,
+        "direct_calls": 0,
+        "mocked_eleven_calls": 0,
+        "key_header_verified": false,
+        "key_absent_from_url_and_body": true,
+        "worker_frames": 32,
+        "stale_result_withheld": true,
+        "simulated_native_utterances": 0
+      },
+      {
+        "scenario": "eleven-fallback",
+        "speech_api_calls": 0,
+        "direct_calls": 0,
+        "mocked_eleven_calls": 1,
+        "key_header_verified": false,
+        "key_absent_from_url_and_body": true,
+        "worker_frames": 3,
+        "eleven_503_native_fallback": true,
+        "simulated_native_utterances": 1
+      },
+      {
+        "scenario": "static",
+        "speech_api_calls": 0,
+        "direct_calls": 1,
+        "mocked_eleven_calls": 0,
+        "key_header_verified": true,
+        "key_absent_from_url_and_body": true,
+        "worker_frames": 3,
+        "max_positive_detections": 5,
+        "static_direct_gemini": true,
+        "key_removed_on_reload": true,
+        "simulated_native_utterances": 0
+      }
+    ]
+  },
+  "manual_photo": {
+    "passed": true,
+    "manual_photo_request": true,
+    "maximum_dimension": 800,
+    "solid_photo_skips_AI": true,
+    "page_errors": [],
+    "external_paid_requests": 0
+  },
+  "live_gemini": {
+    "http": 200,
+    "seconds": 2.77,
+    "reply": {
+      "speak": false,
+      "message": "",
+      "urgency": "none"
+    },
+    "fixture": "two identical public synthetic gray JPEGs; no personal scene",
+    "phone_latency_verified": false
+  },
+  "local_model_functional_test": {
+    "test": "Exact production q4f16 models and prompts with Korean photo question; Node CPU only, NOT browserGPU or phone benchmark",
+    "nodeVersion": "v24.19.0",
+    "nodeFlags": [
+      "--no-js-float16array",
+      "--use-env-proxy"
+    ],
+    "models": {
+      "caption": {
+        "id": "HuggingFaceTB/SmolVLM-256M-Instruct",
+        "revision": "7e3e67edbbed1bf9888184d9df282b700a323964",
+        "license": "Apache-2.0",
+        "bytes": 188843109
+      },
+      "translation": {
+        "id": "Xenova/nllb-200-distilled-600M",
+        "revision": "261c31d1a5732c67cdd16d80e8d6088507c7ccea",
+        "license": "CC-BY-NC-4.0",
+        "attribution": "Meta AI, NLLB Team; ONNX conversion by Xenova. Noncommercial use only.",
+        "source": "https://huggingface.co/facebook/nllb-200-distilled-600M",
+        "bytes": 1253954737
+      }
+    },
+    "downloadBytes": 1442797846,
+    "started": "2026-11-02T00:44:41.521Z",
+    "question": "사진에 고양이가 몇 마리 있나요?",
+    "englishQuestion": "How many cats are in this picture?",
+    "questionTranslationMs": 4459,
+    "english": "Two cats are laying on a pink blanket and two wii-mobiles are next to them.",
+    "captionMs": 1414,
+    "message": "두 마리의 고양이는 분홍색 담요에 누워 있고, 옆에 두 개의 와이 모바일이 있습니다.",
+    "translationMs": 8808,
+    "passed": true,
+    "finished": "2026-11-02T00:45:06.232Z"
+  },
+  "local_translation_examples": [
+    {
+      "english": "This looks like a valley with some water flowing through it.",
+      "message": "이 곳은 물이 흐르는 계곡처럼 보입니다.",
+      "hostTranslationMs": 4689
+    },
+    {
+      "english": "There are two cats on a pink blanket, and they're looking at the camera.",
+      "message": "분홍색 한 담요에 고양이 두 마리가 있고, 카메라를 보고 있습니다.",
+      "hostTranslationMs": 6608
+    },
+    {
+      "english": "A chair is blocking the path ahead.",
+      "message": "의자는 앞으로의 길을 막고 있습니다.",
+      "hostTranslationMs": 3693
+    }
+  ],
+  "browser_gpu_inference_verified": false,
+  "physical_phone_latency_verified": false,
+  "under_two_seconds_verified": false,
+  "actual_distance_or_heading_measured": false,
+  "browser_gpu_probe": {
+    "software_adapter_available": true,
+    "shader_f16_supported": false,
+    "local_mode_correctly_unavailable": true
+  },
+  "ble_protocol_mock_tests_passed": 19,
+  "physical_ble_board_verified": false,
+  "credential_literals_in_runtime_source": false,
+  "keys_persisted_in_storage": false,
+  "cloudflare_account_authenticated_in_environment": false,
+  "public_site_deployed_by_this_environment": false,
+  "deployment_deliverable": "Cloudflare Pages static upload ZIP and optional Functions ZIP; account owner completes upload to obtain HTTPS address",
+  "cloudflare_local_worker_runtime": {
+    "advanced_worker_runtime_passed": true,
+    "status_http": 200,
+    "stale_quiet": {
+      "speak": false,
+      "message": "",
+      "urgency": "none"
+    },
+    "speech_missing_key_native_fallback": true,
+    "site_http": 200,
+    "paid_requests": 0
+  },
+  "archive_structure_verified": true,
+  "browser_model_tokenizer_graphs_executed_on_host": true
+}

@@ -1,0 +1,13 @@
+{
+  "id": "./",
+  "name": "길잡이 · 필요한 변화만 안내",
+  "short_name": "길잡이",
+  "lang": "ko",
+  "description": "카메라를 살피고 필요한 변화만 한국어로 안내합니다.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#0b625a",
+  "background_color": "#f5f8f1",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

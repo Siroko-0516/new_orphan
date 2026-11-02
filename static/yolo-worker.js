@@ -3,7 +3,7 @@ import { SIZE, decode } from './yolo-core.js';
 
 let session;
 const backend = 'WASM';
-ort.env.wasm.wasmPaths = new URL('/ort/', self.location.origin).href;
+ort.env.wasm.wasmPaths = new URL(/* @vite-ignore */ '../ort/', import.meta.url).href;
 ort.env.wasm.numThreads = 1;
 const canvas = new OffscreenCanvas(SIZE, SIZE);
 const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -15,7 +15,7 @@ self.onmessage = async ({ data: { id, type, bitmap } }) => {
       if(!session) {
         // Some mobile WebGPU drivers produce invalid but non-throwing results.
         // Use the CPU/WASM path until GPU inference has parity validation.
-        session=await ort.InferenceSession.create('/yolo11n.onnx',{executionProviders:['wasm']});
+        session=await ort.InferenceSession.create(new URL(/* @vite-ignore */ '../yolo11n.onnx', import.meta.url).href,{executionProviders:['wasm']});
       }
       self.postMessage({id,result:{backend}});
       return;
@@ -34,6 +34,7 @@ self.onmessage = async ({ data: { id, type, bitmap } }) => {
     const detections=decode(result.data,result.dims,width,height);
     self.postMessage({id,result:{detections,ms:Math.round(performance.now()-start),backend}});
   } catch(error) {
+    if(type==='init')console.error('[YOLO init]',error);
     self.postMessage({id,error:type==='init'?'YOLO 모델을 불러오지 못했습니다. 새로고침하거나 다른 브라우저에서 다시 시도하세요.':error.message});
   } finally {
     bitmap?.close();tensor?.dispose();
