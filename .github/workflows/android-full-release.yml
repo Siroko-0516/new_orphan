@@ -187,6 +187,8 @@ jobs:
           shutil.copyfile('guidance-native-validation.json',folder/'guidance-checks.json')
           shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v3.zip',folder/'Giljabi-UNO-HM10-SG90-v3.zip')
           shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v3.zip.sha256',folder/'Giljabi-UNO-HM10-SG90-v3.zip.sha256')
+          shutil.copyfile('downloads/Giljabi-SG90-D2-Test-v1.zip',folder/'Giljabi-SG90-D2-Test-v1.zip')
+          shutil.copyfile('downloads/Giljabi-SG90-D2-Test-v1.zip.sha256',folder/'Giljabi-SG90-D2-Test-v1.zip.sha256')
           name='giljabi-'+version+'-debug.apk';target=folder/name
           shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk',target)
           with target.open('rb') as stream:
@@ -205,7 +207,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 0.9 · 버튼 음성비서 / 대화 끊고 듣기 / Gemini 연결 검사' --notes-file android/FULL_RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 0.9.1 · AI 중지 후 BLE 연결 유지' --notes-file android/FULL_RELEASE_NOTES.md
   release-notes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04

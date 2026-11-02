@@ -1,0 +1,28 @@
+{
+  "version": "0.9.1-full",
+  "version_code": 17,
+  "unit_tests": {
+    "tests": 258,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint_errors": 0,
+  "regressions": [
+    "real-time AI stop preserves board owner",
+    "assistant stop preserves board owner",
+    "Activity exit preserves board owner",
+    "same endpoint reuses connection",
+    "TEST uses actual connected board even with empty camera BLE config",
+    "unexpected drop retries without replaying old motor commands",
+    "explicit disconnect cancels retries",
+    "ASSIST without enabled assistant does not start recording"
+  ],
+  "android15": "pending CI",
+  "published_apk": "pending CI",
+  "not_verified": [
+    "physical HM-10 wireless connection on user phone",
+    "servo supply, PWM and movement on user wiring",
+    "OpenAI API billing balance; no OpenAI provider added"
+  ]
+}

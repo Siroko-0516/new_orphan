@@ -20,7 +20,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.*;
 
-/** Explicitly armed microphone/BLE owner; recording starts only on a user trigger. */
+/** Explicitly armed microphone; the separate BoardService owns BLE. */
 @SuppressLint("MissingPermission") // Every protected operation is checked before use; FGS starts from visible Activity.
 public final class AssistantService extends Service {
     private static final String START="dev.giljabi.ASSISTANT_START",STOP="dev.giljabi.ASSISTANT_STOP",TRIGGER="dev.giljabi.ASSISTANT_TRIGGER",ASK="dev.giljabi.ASSISTANT_ASK",CHANNEL="giljabi-assistant";
@@ -36,9 +36,7 @@ public final class AssistantService extends Service {
     static Snapshot snapshot(){return last;}
     static boolean active(){return last.enabled;}
     static boolean busy(){return last.busy;}
-    static boolean ownsBle(String address){return last.enabled&&!address.isEmpty()&&address.equals(last.address);}
-    static boolean ready(){return instance!=null&&instance.ble!=null&&instance.ble.isReady();}
-    static boolean send(String value){return instance!=null&&instance.ble!=null&&instance.ble.send(value);}
+    static boolean boardButton(){AssistantService s=instance;if(s==null||!s.alive||!s.foreground)return false;s.button(true);return true;}
     static boolean suppressGuidance(Context c){AudioManager a=c.getSystemService(AudioManager.class);return busy()||a!=null&&a.getMode()!=AudioManager.MODE_NORMAL;}
     static void observe(Observer o){OBSERVERS.addIfAbsent(o);o.state(last);}
     static void forget(Observer o){OBSERVERS.remove(o);}
@@ -46,6 +44,7 @@ public final class AssistantService extends Service {
         if(!address.isEmpty()&&!android.bluetooth.BluetoothAdapter.checkBluetoothAddress(address))throw new IOException("BLE 기기 주소를 확인하세요.");
         try{UUID.fromString(service);UUID.fromString(characteristic);}catch(IllegalArgumentException e){throw new IOException("BLE UUID를 확인하세요.");}
         if(ContextCompat.checkSelfPermission(c,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)throw new IOException("마이크 권한을 먼저 허용해주세요.");
+        if(!address.isEmpty()&&!BoardService.active())BoardService.connect(c,address,service,characteristic);
         try{ContextCompat.startForegroundService(c,new Intent(c,AssistantService.class).setAction(START).putExtra("address",address).putExtra("service",service).putExtra("characteristic",characteristic));}catch(RuntimeException e){throw new IOException("앱을 화면에 연 상태에서 음성비서를 시작해주세요.",e);}
     }
     static void stop(Context c){if(active())c.startService(new Intent(c,AssistantService.class).setAction(STOP));}
@@ -57,7 +56,8 @@ public final class AssistantService extends Service {
     private final ExecutorService io=Executors.newSingleThreadExecutor(r->new Thread(r,"assistant-request"));
     private volatile long epoch;private long inputSegment=-1,outputEpoch,lastButton=-10000;
     private volatile boolean alive=true,dialogue,speaking,waiting;private long microphoneEpoch;
-    private BleLink ble;private String address="",serviceId=BleLink.DEFAULT_SERVICE,characteristicId=BleLink.DEFAULT_CHARACTERISTIC;
+    private String address="";
+    private final BoardService.Observer boardObserver=s->{address=s.address;bleStatus=s.status;publish();};
     private String state="음성비서 준비 중",heard="",answer="",bleStatus="BLE 미연결",inputRoute="";
     private AssistantMic microphone;private AssistantLocation location;private volatile GeminiClient.Request request;private volatile PlacesClient.Request placesRequest;private Future<?> task;
     private ElevenSpeech eleven;private TextToSpeech tts;private boolean ttsReady,foreground,focusHeld;
@@ -67,7 +67,6 @@ public final class AssistantService extends Service {
     private final ArrayDeque<String> history=new ArrayDeque<>();
     private static final class PendingCall {final AssistantContacts.Contact contact;final AssistantCallGuard guard=new AssistantCallGuard(SystemClock.elapsedRealtime());PendingCall(AssistantContacts.Contact c){contact=c;}}
     private PendingCall pendingCall;
-    private final Runnable reconnect=new Runnable(){@Override public void run(){if(alive){connectBle();main.postDelayed(this,10000);}}};
 
     @Override public void onCreate(){
         super.onCreate();instance=this;
@@ -82,7 +81,7 @@ public final class AssistantService extends Service {
             @Override public void onError(String id){main.post(()->{if(validOutput(id))endDialogue("기본 한국어 음성을 재생하지 못했어요.");});}
         });
         eleven=new ElevenSpeech(this,message->{if(alive&&speaking){state=message;publish();}},this::nativeSpeak,message->{if(speaking&&outputStarted!=null)outputStarted.accept(message);},this::speechDone,true);
-        ble=new BleLink(this,message->{bleStatus=message;publish();},devices->{},this::publish,command->{if("ASSIST".equals(command))button(true);});
+        BoardService.observe(boardObserver);
         PowerManager pm=getSystemService(PowerManager.class);if(pm!=null){wake=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"giljabi:assistant");wake.setReferenceCounted(false);}
     }
     @Override public int onStartCommand(Intent intent,int flags,int startId){
@@ -92,24 +91,15 @@ public final class AssistantService extends Service {
         if(ASK.equals(action)){if(foreground){String value=intent.getStringExtra("text");if(value!=null&&!value.trim().isEmpty()&&value.length()<=1000)typed(value.trim());}return START_NOT_STICKY;}
         if(!START.equals(action))return START_NOT_STICKY;
         try{
-            String next=intent.getStringExtra("address");if(next==null)next="";
-            if(!next.equals(address))ble.disconnect();address=next;serviceId=intent.getStringExtra("service");characteristicId=intent.getStringExtra("characteristic");
             int types=Build.VERSION.SDK_INT>=29?ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK:0;
             if(Build.VERSION.SDK_INT>=30)types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
-            if(Build.VERSION.SDK_INT>=29&&!address.isEmpty())types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
             if(Build.VERSION.SDK_INT>=29&&(permission(Manifest.permission.ACCESS_FINE_LOCATION)||permission(Manifest.permission.ACCESS_COARSE_LOCATION)))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
             ServiceCompat.startForeground(this,NOTICE,notification(),types);foreground=true;
-            MonitorService.assistantTakesBle(address);state="음성비서 대기 · 보드 버튼이나 앱의 말하기를 누르세요.";
-            main.removeCallbacks(reconnect);main.postDelayed(reconnect,300);publish();
+            state="음성비서 대기 · 보드 버튼이나 앱의 말하기를 누르세요.";publish();
         }catch(RuntimeException error){state="음성비서 시작 실패 · 앱을 열고 마이크·주변 기기 권한을 확인해주세요.";shutdown();stopSelf();}
         return START_NOT_STICKY;
     }
     private boolean permission(String name){return ContextCompat.checkSelfPermission(this,name)==PackageManager.PERMISSION_GRANTED;}
-    private void connectBle(){
-        if(address.isEmpty()||ble.isReady()||ble.isConnecting())return;
-        if(Build.VERSION.SDK_INT>=31&&!permission(Manifest.permission.BLUETOOTH_CONNECT)){bleStatus="주변 기기 권한이 필요해요.";publish();return;}
-        try{android.bluetooth.BluetoothAdapter adapter=ble.adapter();if(adapter==null||!adapter.isEnabled()){bleStatus="블루투스를 켜주세요.";publish();return;}ble.connect(new BleLink.Device(adapter.getRemoteDevice(address),"HM-10"),serviceId,characteristicId);}catch(RuntimeException error){bleStatus="HM-10 연결을 확인해주세요.";publish();}
-    }
     private boolean prepareDialogue(){
         if(!alive||!permission(Manifest.permission.RECORD_AUDIO)){state="마이크 권한을 허용한 뒤 다시 시작해주세요.";publish();return false;}
         if(!new ApiKeyStore(this).hasKey()){state="Gemini API 키를 설정해주세요.";publish();return false;}
@@ -217,8 +207,8 @@ public final class AssistantService extends Service {
         PendingIntent stop=PendingIntent.getService(this,612,new Intent(this,AssistantService.class).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentTitle("길잡이 음성비서").setContentText(dialogue?"대화 모드 · 말하거나 버튼으로 끊기":"버튼 대기 · 누르면 듣기 시작").setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).addAction(android.R.drawable.ic_btn_speak_now,"말하기 / 끊기",trigger).addAction(android.R.drawable.ic_media_pause,"비서 중지",stop).build();
     }
-    private void publish(){if(instance!=this)return;last=new Snapshot(alive&&foreground,ble!=null&&ble.isReady(),dialogue,address,state,heard,answer,bleStatus,inputRoute,places,mapRequested);for(Observer o:OBSERVERS)o.state(last);if(foreground){NotificationManager n=getSystemService(NotificationManager.class);if(n!=null)n.notify(NOTICE,notification());}}
-    private void shutdown(){if(!alive)return;endDialogue("음성비서 꺼짐");alive=false;foreground=false;main.removeCallbacksAndMessages(null);if(ble!=null)ble.close();if(eleven!=null)eleven.close();if(tts!=null){tts.shutdown();tts=null;}io.shutdownNow();ServiceCompat.stopForeground(this,ServiceCompat.STOP_FOREGROUND_REMOVE);publish();}
+    private void publish(){if(instance!=this)return;last=new Snapshot(alive&&foreground,BoardService.ready(),dialogue,address,state,heard,answer,bleStatus,inputRoute,places,mapRequested);for(Observer o:OBSERVERS)o.state(last);if(foreground){NotificationManager n=getSystemService(NotificationManager.class);if(n!=null)n.notify(NOTICE,notification());}}
+    private void shutdown(){if(!alive)return;endDialogue("음성비서 꺼짐");alive=false;foreground=false;BoardService.forget(boardObserver);main.removeCallbacksAndMessages(null);if(eleven!=null)eleven.close();if(tts!=null){tts.shutdown();tts=null;}io.shutdownNow();ServiceCompat.stopForeground(this,ServiceCompat.STOP_FOREGROUND_REMOVE);publish();}
     @Override public void onDestroy(){shutdown();if(instance==this)instance=null;super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
 }

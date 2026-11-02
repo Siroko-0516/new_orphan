@@ -81,7 +81,8 @@ public final class MonitorService extends Service {
     private volatile int cameraGeneration;
     private ScheduledFuture<?> repeat;
     private VideoSource camera;
-    private BleLink ble;
+    private boolean boardWasReady;
+    private final BoardService.Observer boardObserver=s->{if(s.ready&&!boardWasReady)motorMemory.reset();boardWasReady=s.ready;bleStatus=s.status;publish();};
     private final ObstacleTracker tracker=new ObstacleTracker();
     private ElevenSpeech eleven;
     private TextToSpeech tts;private boolean ttsReady,cleanupQueued,cleanupComplete,destroyed,foreground;
@@ -92,12 +93,11 @@ public final class MonitorService extends Service {
     private long lastNotice,lastTrackedSequence=-1;
     private final Runnable reconnect=()->openCamera();
     private final Runnable renew=new Runnable(){@Override public void run(){if(monitoring&&!stopping){if(wake!=null)wake.acquire(TimeUnit.MINUTES.toMillis(30));main.postDelayed(this,TimeUnit.MINUTES.toMillis(10));}}};
-    private final Runnable reconnectBle=new Runnable(){@Override public void run(){if(monitoring&&!stopping){connectBle();main.postDelayed(this,10000);}}};
 
     @Override public void onCreate(){
         super.onCreate();instance=this;eleven=new ElevenSpeech(this,message->{if(monitoring&&!stopping){speechStatus=message;publish();}},text->{if(monitoring&&!stopping)speakOffline(text,activeSpeechValid);},this::speechStarted);
         NotificationManager notifications=getSystemService(NotificationManager.class);if(notifications!=null)notifications.createNotificationChannel(new NotificationChannel(CHANNEL,"길잡이 실시간 분석",NotificationManager.IMPORTANCE_LOW));
-        ble=new BleLink(this,message->{bleStatus=message;publish();},devices->{},()->{tracker.reset();publish();});
+        BoardService.observe(boardObserver);
     }
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         String action=intent==null?STOP:intent.getAction();
@@ -113,7 +113,7 @@ public final class MonitorService extends Service {
             if(!START.equals(action)||monitoring||stopping||cleanupQueued)return START_NOT_STICKY;
             config=next;
             int types=Build.VERSION.SDK_INT>=29?ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK:0;
-            if(Build.VERSION.SDK_INT>=29&&(next.source==CameraSource.ESP||!next.bleAddress.isEmpty()))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
+            if(Build.VERSION.SDK_INT>=29&&next.source==CameraSource.ESP)types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
             if(Build.VERSION.SDK_INT>=30&&CameraSource.phone(next.source))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
             ServiceCompat.startForeground(this,NOTIFICATION,notification(),types);foreground=true;monitoring=true;gate.start();sceneChanges.reset();narration.reset();motorMemory.reset();acquireLocks();
             tts=new TextToSpeech(getApplicationContext(),code->main.post(()->{ttsReady=code==TextToSpeech.SUCCESS;if(!ttsReady){speechStatus="오프라인 음성 초기화 실패 · 화면 결과로 확인하세요.";publish();}else if(pendingOffline!=null){String text=pendingOffline;java.util.function.BooleanSupplier valid=pendingOfflineValid;pendingOffline=null;pendingOfflineValid=null;speakOffline(text,valid);}}));
@@ -124,7 +124,7 @@ public final class MonitorService extends Service {
                 @Override public void onStop(String id,boolean interrupted){main.post(()->finishNative(id,false));}
             });
             tts.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
-            repeat=worker.scheduleWithFixedDelay(this::analyzeLatest,0,250,TimeUnit.MILLISECONDS);openCamera();main.post(reconnectBle);publish();
+            repeat=worker.scheduleWithFixedDelay(this::analyzeLatest,0,250,TimeUnit.MILLISECONDS);openCamera();publish();
         }catch(Exception failure){terminalError="실시간 실행 실패: "+message(failure);stopMonitoring();}
         return START_NOT_STICKY;
     }
@@ -252,17 +252,8 @@ public final class MonitorService extends Service {
     private void progress(ContinuousGate.Ticket ticket,String text){main.post(()->{if(monitoring&&!stopping&&gate.current(ticket)){status=text;publish();}});}
     private void check(ContinuousGate.Ticket ticket){if(!gate.current(ticket))throw new CancellationException();}
     private void closeRequest(){GeminiClient.Request current=request;if(current!=null)new Thread(current::close,"monitor-gemini-close").start();}
-    static void assistantTakesBle(String address){MonitorService s=instance;if(s!=null&&s.config!=null&&s.config.bleAddress.equals(address)&&s.ble!=null)s.ble.disconnect();}
     static void pauseForAssistant(){MonitorService s=instance;if(s==null)return;s.activeSpeechValid=()->false;s.pendingOffline=null;s.pendingOfflineValid=null;s.offlineSpeaking=false;s.main.removeCallbacks(s.nativeSpeechCheck);if(s.tts!=null)s.tts.stop();if(s.eleven!=null)s.eleven.stop();}
-    private boolean sendBoard(String command){return AssistantService.ownsBle(config.bleAddress)?AssistantService.send(command):ble.send(command);}
-    private void connectBle(){
-        if(config!=null&&AssistantService.ownsBle(config.bleAddress)){bleStatus=AssistantService.snapshot().bleStatus;publish();return;}
-        if(config==null||config.bleAddress.isEmpty()||ble.isReady()||ble.isConnecting())return;
-        if(Build.VERSION.SDK_INT>=31&&ContextCompat.checkSelfPermission(this,Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){bleStatus="아두이노 연결에 주변 기기 권한이 필요합니다.";publish();return;}
-        try{BluetoothAdapter adapter=ble.adapter();if(adapter==null||!adapter.isEnabled()){bleStatus="아두이노 연결을 위해 블루투스를 켜세요.";publish();return;}
-            ble.connect(new BleLink.Device(adapter.getRemoteDevice(config.bleAddress),"HM-10"),config.serviceUuid,config.characteristicUuid);
-        }catch(RuntimeException error){bleStatus="BLE 연결 실패: "+message(error);publish();}
-    }
+    private boolean sendBoard(String command){return BoardService.send(command);}
     private void speechStarted(String text){
         Announcement current=announcement;
         if(current==null||!current.message.equals(text)||!activeSpeechValid.getAsBoolean())return;
@@ -299,14 +290,14 @@ public final class MonitorService extends Service {
         return new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_camera).setContentTitle(title).setContentText(status).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setCategory(NotificationCompat.CATEGORY_SERVICE).addAction(android.R.drawable.ic_media_pause,"중지",stop).build();
     }
     private void publish(){
-        if(instance!=this)return;last=new Snapshot(monitoring||stopping,stopping,gate.isPaused(),(config!=null&&AssistantService.ownsBle(config.bleAddress)?AssistantService.ready():ble!=null&&ble.isReady()),config,status,result,bleStatus,speechStatus);
+        if(instance!=this)return;last=new Snapshot(monitoring||stopping,stopping,gate.isPaused(),BoardService.ready(),config,status,result,bleStatus,speechStatus);
         for(Observer observer:OBSERVERS)observer.state(last);
         if(foreground&&SystemClock.elapsedRealtime()-lastNotice>=1000){lastNotice=SystemClock.elapsedRealtime();NotificationManager manager=getSystemService(NotificationManager.class);if(manager!=null&&(Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED))manager.notify(NOTIFICATION,notification());}
     }
     private void clearFrame(){synchronized(frameLock){FramePacket old=latest;latest=null;recentPhotos.clear();previousReview=null;if(old!=null)old.bitmap.recycle();}}
     private void stopMonitoring(){
-        if(cleanupQueued)return;cleanupQueued=true;stopping=true;monitoring=false;gate.stop();cameraGeneration++;main.removeCallbacks(reconnect);main.removeCallbacks(reconnectBle);main.removeCallbacks(renew);
-        activeSpeechValid=()->false;offlineSpeaking=false;main.removeCallbacks(nativeSpeechCheck);pendingOffline=null;pendingOfflineValid=null;if(repeat!=null)repeat.cancel(false);closeRequest();if(camera!=null){camera.close();camera=null;}if(ble!=null)ble.close();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();status=terminalError.isEmpty()?"실시간 중지 처리 중 · 현재 로컬 연산이 끝나면 종료합니다.":terminalError;publish();
+        if(cleanupQueued)return;cleanupQueued=true;stopping=true;monitoring=false;gate.stop();cameraGeneration++;main.removeCallbacks(reconnect);main.removeCallbacks(renew);
+        activeSpeechValid=()->false;offlineSpeaking=false;main.removeCallbacks(nativeSpeechCheck);pendingOffline=null;pendingOfflineValid=null;if(repeat!=null)repeat.cancel(false);closeRequest();if(camera!=null){camera.close();camera=null;}if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();status=terminalError.isEmpty()?"실시간 중지 처리 중 · 현재 로컬 연산이 끝나면 종료합니다.":terminalError;publish();
         worker.execute(()->{try{LocalVlm.get(this).release();}finally{main.post(this::finishStop);}});
     }
     private void finishStop(){
@@ -314,7 +305,7 @@ public final class MonitorService extends Service {
         foreground=false;cleanupComplete=true;ServiceCompat.stopForeground(this,ServiceCompat.STOP_FOREGROUND_REMOVE);worker.shutdown();if(destroyed)markStopped();else stopSelf();
     }
     private void markStopped(){stopping=false;status=terminalError.isEmpty()?"실시간 AI 중지됨":terminalError;publish();if(instance==this)instance=null;}
-    @Override public void onDestroy(){destroyed=true;stopMonitoring();if(cleanupComplete)markStopped();super.onDestroy();}
+    @Override public void onDestroy(){destroyed=true;BoardService.forget(boardObserver);stopMonitoring();if(cleanupComplete)markStopped();super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}
     private static String message(Throwable error){String text=error.getMessage();return text==null?error.getClass().getSimpleName():text;}
 }
