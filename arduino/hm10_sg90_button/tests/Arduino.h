@@ -22,4 +22,5 @@ public:
     template<class T> void println(const T& value){print(value);output+='\n';}
     void feed(const std::string& value){for(char c:value)input.push_back(c);}
 };
-inline Stream Serial;
+using HardwareSerial=Stream;
+inline HardwareSerial Serial;

@@ -185,8 +185,8 @@ jobs:
           shutil.copyfile('build-validation.json',folder/'checks.json')
           shutil.copyfile('native-validation.json',folder/'native-checks.json')
           shutil.copyfile('guidance-native-validation.json',folder/'guidance-checks.json')
-          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v1.zip',folder/'Giljabi-UNO-HM10-SG90-v1.zip')
-          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v1.zip.sha256',folder/'Giljabi-UNO-HM10-SG90-v1.zip.sha256')
+          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v3.zip',folder/'Giljabi-UNO-HM10-SG90-v3.zip')
+          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v3.zip.sha256',folder/'Giljabi-UNO-HM10-SG90-v3.zip.sha256')
           name='giljabi-'+version+'-debug.apk';target=folder/name
           shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk',target)
           with target.open('rb') as stream:

@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // UNO R3 + HM-10 UART + SG90 + momentary button. Read README before wiring.
 #include <Arduino.h>
-#include <SoftwareSerial.h>
 #include <Servo.h>
 #include <string.h>
 
-const uint8_t SERVO_PIN = 5;
-const uint8_t BUTTON_PIN = 2;
+const uint8_t SERVO_PIN = 2;
+const uint8_t BUTTON_PIN = 3;
 // true: powered 3-pin button module (S/V/G, with its own resistor).
-// false: bare 2-pin switch between D2 and GND.
+// false: bare 2-pin switch between D3 and GND.
 const bool BUTTON_MODULE = true;
 const uint8_t CENTER_ANGLE = 90;
 const uint8_t LEFT_ANGLE = 80;
 const uint8_t RIGHT_ANGLE = 100;
-SoftwareSerial hm10(10, 11); // UNO RX, TX; level-shift D11 to the HM-10 RX.
+// Hardware UART shared with USB. Disconnect D0/D1 wires before uploading.
+// HM-10 TX -> UNO D0 (RX); UNO D1 (TX) -> divider -> HM-10 RX.
+HardwareSerial &hm10 = Serial;
 Servo warningServo;
 char line[32];
 uint8_t used = 0;
@@ -31,9 +32,6 @@ unsigned long lastAssistAt = 0;
 
 void startWarning() {
   if (moving) return; // Coalesce alerts; no queued/unbounded motor movement.
-  // AVR SoftwareSerial blocks interrupts for each byte. Suspend reception only
-  // during this 760ms gesture to avoid stretching the Servo library's pulses.
-  hm10.stopListening();
   warningServo.attach(SERVO_PIN);
   warningServo.write(CENTER_ANGLE);
   digitalWrite(LED_BUILTIN, HIGH);
@@ -56,7 +54,6 @@ void updateWarning() {
     moving = false;
     used = 0;
     discardLine = false;
-    hm10.listen();
   }
 }
 
@@ -66,7 +63,6 @@ void setup() {
   digitalWrite(SERVO_PIN, LOW); // No unsolicited movement at boot.
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
-  Serial.begin(115200);
   hm10.begin(9600);
   // Release the button while powering up/resetting. This accepts either
   // active-HIGH or active-LOW modules, and avoids a false press at startup.
@@ -75,9 +71,7 @@ void setup() {
   rawButton = stableButton = releasedLevel;
   buttonChangedAt = millis();
   lastAssistAt = millis() - 1000UL;
-  Serial.println("Giljabi HM-10 / SG90 / ASSIST ready");
-  Serial.print("Button released level: ");
-  Serial.println(releasedLevel == HIGH ? "HIGH" : "LOW");
+  // This UART carries the BLE protocol. Do not print debug messages here.
 }
 
 void loop() {
@@ -87,21 +81,14 @@ void loop() {
     stableButton = sample;
     if (stableButton != releasedLevel) assistantPending = true;
   }
-  updateWarning();
-  if (!moving && assistantPending && millis() - lastAssistAt >= 800UL) {
-    hm10.print("ASSIST\n");
-    Serial.println("Sent: ASSIST");
-    assistantPending = false;
-    lastAssistAt = millis();
-  }
-  while (!moving && hm10.available()) {
+  // Drain UART even during a gesture; startWarning() coalesces extra alerts.
+  while (hm10.available()) {
     char c = static_cast<char>(hm10.read());
     if (c == '\r') continue;
     if (c == '\n') {
       if (!discardLine) {
         line[used] = '\0';
         if (strcmp(line, "TEST") == 0 || strcmp(line, "OBSTACLE") == 0) {
-          Serial.print("Received: "); Serial.println(line);
           startWarning();
         }
       }
@@ -110,5 +97,11 @@ void loop() {
       if (used < sizeof(line) - 1) line[used++] = c;
       else { used = 0; discardLine = true; }
     }
+  }
+  updateWarning();
+  if (!moving && assistantPending && millis() - lastAssistAt >= 800UL) {
+    hm10.print("ASSIST\n");
+    assistantPending = false;
+    lastAssistAt = millis();
   }
 }
