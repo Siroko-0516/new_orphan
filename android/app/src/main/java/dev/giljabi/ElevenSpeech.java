@@ -14,6 +14,7 @@ final class ElevenSpeech implements AutoCloseable {
     static final long DEFAULT_WAIT_MS=7000;
     private final Context context;
     private final Consumer<String> status,fallback,started;
+    private final Runnable finished;private final boolean communication;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final AtomicLong generation=new AtomicLong();
@@ -28,7 +29,8 @@ final class ElevenSpeech implements AutoCloseable {
     }
     ElevenSpeech(Context context,Consumer<String> status){this(context,status,null,null);}
     ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback){this(context,status,fallback,null);}
-    ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback,Consumer<String> started){this.context=context.getApplicationContext();this.status=status;this.fallback=fallback;this.started=started;}
+    ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback,Consumer<String> started){this(context,status,fallback,started,null,false);}
+    ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback,Consumer<String> started,Runnable finished,boolean communication){this.context=context.getApplicationContext();this.status=status;this.fallback=fallback;this.started=started;this.finished=finished;this.communication=communication;}
     void speak(String text){speak(text,()->true,DEFAULT_WAIT_MS);}
     void speak(String text,BooleanSupplier valid){speak(text,valid,DEFAULT_WAIT_MS);}
     void speak(String text,BooleanSupplier valid,long waitMs){
@@ -78,7 +80,7 @@ final class ElevenSpeech implements AutoCloseable {
         if(current!=attempt||!attempt.gate.active()){file.delete();return;}
         try{
             audioFile=file;player=new MediaPlayer();MediaPlayer active=player;
-            active.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
+            active.setAudioAttributes(new AudioAttributes.Builder().setUsage(communication?AudioAttributes.USAGE_VOICE_COMMUNICATION:AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
             active.setDataSource(file.getAbsolutePath());
             active.setOnPreparedListener(p->{
                 if(current!=attempt||player!=p)return;
@@ -94,7 +96,7 @@ final class ElevenSpeech implements AutoCloseable {
             active.setOnCompletionListener(p->{
                 if(current!=attempt||player!=p)return;
                 boolean completed=attempt.gate.complete();removeCallbacks(attempt);releasePlayer();current=null;
-                if(completed)status.accept("ElevenLabs 음성 안내 완료");
+                if(completed){status.accept("ElevenLabs 음성 안내 완료");if(finished!=null)finished.run();}
             });
             active.setOnErrorListener((p,what,extra)->{if(current==attempt&&player==p)fail(attempt,"ElevenLabs 재생에 실패해");return true;});
             if(!attempt.gate.active()){cancel(attempt);return;}active.prepareAsync();

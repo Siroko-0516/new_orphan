@@ -1,0 +1,38 @@
+{
+  "version": "0.9.0-full",
+  "unit_tests": {
+    "tests": 246,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint_errors": 0,
+  "vad_host": {
+    "model": "Silero VAD v5.1",
+    "public_sample": "ggml-org/whisper.cpp samples/jfk.wav",
+    "speech_frames_above_085": 168,
+    "speech_probability_max": 0.9976255893707275,
+    "silence_probability_max": 0.01201203465461731,
+    "host_seconds": 0.024,
+    "device_audio_routing_tested": false
+  },
+  "android15_instrumentation": "pending CI",
+  "uno_compilation": "pending CI",
+  "published_apk": "pending CI",
+  "gemini_live": {
+    "models_list_http": 200,
+    "text_probe_model": "gemini-3.1-flash-lite",
+    "text_probe_http": 503,
+    "image_probe_model": "gemini-3.8-flash",
+    "image_probe_http": 503,
+    "generation_success_verified": false
+  },
+  "not_verified": [
+    "physical HM-10 notifications and UNO wiring",
+    "SG90 movement and power",
+    "earbud microphone, acoustic barge-in and TTS playback",
+    "real location and Overpass live provider",
+    "SIM calls and contact lookup on user device",
+    "local VLM under 2 seconds"
+  ]
+}

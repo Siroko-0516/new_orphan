@@ -23,6 +23,9 @@ final class BleLink implements AutoCloseable {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final Consumer<String> status;
     private final Consumer<List<Device>> found;
+    private final Consumer<String> received;private final BleButtonFrames frames=new BleButtonFrames();
+    private boolean subscribing,buttonsReady;
+    private static final UUID CCCD=UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private final Runnable stateChanged;
     private final Map<String,Device> devices=new LinkedHashMap<>();
     private final ArrayDeque<byte[]> writes=new ArrayDeque<>();
@@ -33,13 +36,17 @@ final class BleLink implements AutoCloseable {
     private boolean writing;
     private final Runnable scanTimeout,connectionTimeout,writeTimeout;
     BleLink(Context context,Consumer<String> status,Consumer<List<Device>> found,Runnable stateChanged){
-        this.context=context.getApplicationContext();this.status=status;this.found=found;this.stateChanged=stateChanged;
+        this(context,status,found,stateChanged,command->{});
+    }
+    BleLink(Context context,Consumer<String> status,Consumer<List<Device>> found,Runnable stateChanged,Consumer<String> received){
+        this.context=context.getApplicationContext();this.status=status;this.found=found;this.stateChanged=stateChanged;this.received=received;
         scanTimeout=()->{stopScan();status.accept("BLE 검색 완료 · "+devices.size()+"개");};
         connectionTimeout=()->{disconnect();status.accept("BLE 연결 시간 초과 · 모듈 전원과 UUID를 확인하세요.");};
         writeTimeout=()->{disconnect();status.accept("BLE 쓰기 응답 시간 초과 · 재전송하지 않았습니다.");};
     }
-    boolean isReady(){return current!=null&&writer!=null;}
-    boolean isConnecting(){return current!=null&&writer==null;}
+    boolean isReady(){return current!=null&&writer!=null&&!subscribing;}
+    boolean buttonsReady(){return isReady()&&buttonsReady;}
+    boolean isConnecting(){return current!=null&&!isReady();}
     BluetoothAdapter adapter(){BluetoothManager manager=context.getSystemService(BluetoothManager.class);return manager==null?null:manager.getAdapter();}
     void scan(){
         disconnect();devices.clear();found.accept(new ArrayList<>());
@@ -84,8 +91,17 @@ final class BleLink implements AutoCloseable {
             if(code!=BluetoothGatt.GATT_SUCCESS||characteristic==null||(characteristic.getProperties()&(BluetoothGattCharacteristic.PROPERTY_WRITE|BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE))==0){
                 disconnect();status.accept("쓰기 가능한 UART를 찾지 못했습니다. HM-10 종류와 UUID를 확인하세요.");return;
             }
-            writer=characteristic;main.removeCallbacks(connectionTimeout);status.accept("BLE 연결됨 · 전송 준비 완료");stateChanged.run();
+            writer=characteristic;frames.reset();
+            int properties=writer.getProperties();BluetoothGattDescriptor descriptor=writer.getDescriptor(CCCD);
+            if((properties&(BluetoothGattCharacteristic.PROPERTY_NOTIFY|BluetoothGattCharacteristic.PROPERTY_INDICATE))!=0&&descriptor!=null&&gatt.setCharacteristicNotification(writer,true)){
+                subscribing=true;byte[] value=(properties&BluetoothGattCharacteristic.PROPERTY_NOTIFY)!=0?BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE:BluetoothGattDescriptor.ENABLE_INDICATION_VALUE;
+                boolean accepted;if(Build.VERSION.SDK_INT>=33)accepted=gatt.writeDescriptor(descriptor,value)==BluetoothStatusCodes.SUCCESS;else{descriptor.setValue(value);accepted=gatt.writeDescriptor(descriptor);}
+                if(!accepted)finishSubscription(false);
+            }else finishSubscription(false);
         });}
+        @Override public void onDescriptorWrite(BluetoothGatt gatt,BluetoothGattDescriptor descriptor,int code){onGatt(gatt,()->{if(subscribing&&CCCD.equals(descriptor.getUuid()))finishSubscription(code==BluetoothGatt.GATT_SUCCESS);});}
+        @Override public void onCharacteristicChanged(BluetoothGatt gatt,BluetoothGattCharacteristic characteristic,byte[] value){byte[] copy=value==null?null:value.clone();onGatt(gatt,()->{if(buttonsReady&&writer!=null&&writer.getUuid().equals(characteristic.getUuid()))frames.accept(copy,received);});}
+        @Override public void onCharacteristicChanged(BluetoothGatt gatt,BluetoothGattCharacteristic characteristic){if(Build.VERSION.SDK_INT<33)onCharacteristicChanged(gatt,characteristic,characteristic.getValue());}
         @Override public void onCharacteristicWrite(BluetoothGatt gatt,BluetoothGattCharacteristic characteristic,int code){onGatt(gatt,()->{
             if(!writing||writer==null||!characteristic.getUuid().equals(writer.getUuid()))return;
             main.removeCallbacks(writeTimeout);writing=false;
@@ -93,6 +109,7 @@ final class BleLink implements AutoCloseable {
             writes.poll();status.accept("BLE 쓰기 완료 · 아두이노 수신은 보드에서 확인하세요.");writeNext();
         });}
     };
+    private void finishSubscription(boolean enabled){subscribing=false;buttonsReady=enabled;main.removeCallbacks(connectionTimeout);status.accept(enabled?"BLE 연결됨 · 서보 전송 / ASSIST 버튼 수신 준비 완료":"BLE 연결됨 · 전송 가능, 버튼 알림은 모듈 Notify 설정을 확인하세요.");stateChanged.run();}
     boolean send(String command){
         if(!isReady()){status.accept("먼저 HM-10을 연결하세요.");return false;}
         byte[] data=command.getBytes(StandardCharsets.US_ASCII);
@@ -112,7 +129,7 @@ final class BleLink implements AutoCloseable {
     }
     void disconnect(){
         stopScan();main.removeCallbacks(connectionTimeout);main.removeCallbacks(writeTimeout);
-        BluetoothGatt old=current;current=null;writer=null;writing=false;writes.clear();
+        BluetoothGatt old=current;current=null;writer=null;writing=false;subscribing=false;buttonsReady=false;frames.reset();writes.clear();
         if(old!=null){try{old.disconnect();}catch(RuntimeException ignored){}try{old.close();}catch(RuntimeException ignored){}}stateChanged.run();
     }
     @Override public void close(){disconnect();}

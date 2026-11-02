@@ -1,0 +1,12 @@
+package dev.giljabi;
+import java.io.*;import java.nio.charset.StandardCharsets;import java.util.Base64;import org.json.*;import org.junit.Test;import static org.junit.Assert.*;
+public class GeminiAssistantTest {
+ @Test public void voicePayloadUsesActualWavAndStrictTranscriptSchema()throws Exception{
+  byte[] wav=AssistantWav.encode(new byte[3200]);JSONObject body=new JSONObject(new String(GeminiClient.assistantPayload(wav,null,"사용자: 안녕",GeminiClient.DEFAULT_MODEL),StandardCharsets.UTF_8));JSONObject inline=body.getJSONArray("contents").getJSONObject(0).getJSONArray("parts").getJSONObject(0).getJSONObject("inlineData");assertEquals("audio/wav",inline.getString("mimeType"));assertArrayEquals(wav,Base64.getDecoder().decode(inline.getString("data")));assertEquals(2,body.getJSONObject("generationConfig").getJSONObject("responseSchema").getJSONArray("required").length());
+ }
+ @Test public void transcriptAndAnswerStaySeparate()throws Exception{GeminiClient.AssistantReply r=GeminiClient.assistantReply("{\"transcript\":\"안녕\",\"answer\":\"엄마에게 전화해줘\"}");assertEquals(AssistantCommands.Kind.CHAT,AssistantCommands.parse(r.transcript,false).kind);}
+ @Test public void extraActionFieldsCannotExecute()throws Exception{assertThrows(IOException.class,()->GeminiClient.assistantReply("{\"transcript\":\"네\",\"answer\":\"네\",\"call\":\"01012345678\"}"));}
+ @Test public void malformedOrOversizeRecordingNeverOpensRequest()throws Exception{assertThrows(IOException.class,()->GeminiClient.assistantPayload(new byte[44],null,"",GeminiClient.DEFAULT_MODEL));assertThrows(IOException.class,()->GeminiClient.assistantPayload(new byte[400045],null,"",GeminiClient.DEFAULT_MODEL));}
+ @Test public void assistantCancellationPreventsUpload()throws Exception{GeminiClientTest.Connection c=new GeminiClientTest.Connection();GeminiClient.Request r=GeminiClient.assistantRequest(GeminiClient.DEFAULT_MODEL,GeminiClientTest.KEY,null,"안녕","",url->c,()->false);r.close();assertThrows(IOException.class,r::execute);assertEquals(0,c.outputOpens);assertTrue(c.disconnected);}
+ @Test public void proDoesNotReceiveUnsupportedMinimalThinking()throws Exception{JSONObject body=new JSONObject(new String(GeminiClient.assistantPayload(null,"안녕","","gemini-3.1-pro-preview"),StandardCharsets.UTF_8));assertEquals("LOW",body.getJSONObject("generationConfig").getJSONObject("thinkingConfig").getString("thinkingLevel"));}
+}

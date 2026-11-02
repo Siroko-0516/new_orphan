@@ -69,8 +69,23 @@ jobs:
             android/app/build/outputs/androidTest-results/
             android/app/build/test-results/
           retention-days: 7
+  uno-firmware:
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.3.1'
+      - name: Compile the UNO HM-10 servo and button firmware
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr@1.8.6
+          arduino-cli lib install Servo@1.2.2
+          arduino-cli compile --fqbn arduino:avr:uno arduino/hm10_sg90_button
   full-apk:
-    needs: camera-smoke
+    needs: [camera-smoke, uno-firmware]
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -162,10 +177,16 @@ jobs:
               assert 'lib/arm64-v8a/libggml-vulkan.so' in apk.namelist(), 'Missing optional vision GPU backend'
               assert 'assets/licenses/vulkan-headers.txt' in apk.namelist()
               assert 'assets/licenses/kleidiai.txt' in apk.namelist()
+              assert 'assets/silero_vad.onnx' in apk.namelist()
+              assert 'assets/licenses/silero-vad.txt' in apk.namelist()
+              vad=json.loads(apk.read('assets/silero-vad-provenance.json'))
+              assert hashlib.sha256(apk.read('assets/silero_vad.onnx')).hexdigest()==vad['sha256']
           folder=Path('release-apk');folder.mkdir(exist_ok=True)
           shutil.copyfile('build-validation.json',folder/'checks.json')
           shutil.copyfile('native-validation.json',folder/'native-checks.json')
           shutil.copyfile('guidance-native-validation.json',folder/'guidance-checks.json')
+          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v1.zip',folder/'Giljabi-UNO-HM10-SG90-v1.zip')
+          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v1.zip.sha256',folder/'Giljabi-UNO-HM10-SG90-v1.zip.sha256')
           name='giljabi-'+version+'-debug.apk';target=folder/name
           shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk',target)
           with target.open('rb') as stream:
@@ -184,7 +205,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 · 보행 상황 판단 / 이미지 GPU / 음성 대체' --notes-file android/FULL_RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 0.9 · 버튼 음성비서 / 대화 끊고 듣기 / Gemini 연결 검사' --notes-file android/FULL_RELEASE_NOTES.md
   release-notes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04

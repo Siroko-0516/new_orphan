@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/snakers4/silero-vad/tree/v5.1",
+  "model": "src/silero_vad/data/silero_vad.onnx",
+  "sha256": "2623a2953f6ff3d2c1e61740c6cdb7168133479b267dfef114a4a3cc5bdd788f",
+  "license": "MIT",
+  "purpose": "on-device speech activity; audio is not recognized by this model"
+}

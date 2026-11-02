@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -40,7 +41,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_MODEL=10, PICK_VISION=11, PICK_PHOTO=12, TAKE_PHOTO=13, BLE_PERMISSIONS=20, ENABLE_BLUETOOTH=21,NOTIFICATION_PERMISSION=22,CAMERA_PERMISSION=23;
+    private static final int PICK_MODEL=10, PICK_VISION=11, PICK_PHOTO=12, TAKE_PHOTO=13, BLE_PERMISSIONS=20, ENABLE_BLUETOOTH=21,NOTIFICATION_PERMISSION=22,CAMERA_PERMISSION=23,ASSISTANT_PERMISSIONS=24,ASSISTANT_ACTION_PERMISSIONS=25;
     private final ExecutorService jobs=Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled=new AtomicBoolean();
     private final List<View> controls=new ArrayList<>();
@@ -84,6 +85,10 @@ public final class MainActivity extends Activity {
     private TextView autoStatus;
     private boolean observingMonitor,monitorWasActive,applyingMonitorState;
     private static final long[] INTERVALS={1000,2000,3000,5000,10000};
+    private TextView assistantStatus,assistantHeard,assistantAnswer,assistantRoute;
+    private Button assistantStart,assistantStop,assistantTalk,assistantAsk;private EditText assistantQuestion;
+    private LinearLayout assistantPlaces;private String assistantPlaceKey="";private Runnable assistantPermissionAction;
+    private final AssistantService.Observer assistantObserver=this::onAssistantState;
     private BleLink ble;
     private final List<BleLink.Device> foundDevices=new ArrayList<>();
     private final ObstacleTracker tracker=new ObstacleTracker();
@@ -140,13 +145,26 @@ public final class MainActivity extends Activity {
         bleScan=button(root,"BLE 기기 검색",v->scanBle());
         bleConnect=button(root,"선택한 BLE 기기 연결",v->{Object selected=bleDevices.getSelectedItem();if(selected instanceof BleLink.Device)ble.connect((BleLink.Device)selected,serviceUuid.getText().toString(),characteristicUuid.getText().toString());else bleStatus.setText("기기를 검색하고 HM-10을 선택하세요.");});
         bleDisconnect=button(root,"BLE 연결 해제",v->{ble.disconnect();bleStatus.setText("BLE 연결 해제됨");});
-        bleTest=button(root,"아두이노 TEST 신호 보내기",v->{if(MonitorService.active())MonitorService.test(this);else ble.send("TEST\n");});
-        notifyObjects=new CheckBox(this);notifyObjects.setText("새 물체 감지 시 아두이노 신호 전송");root.addView(notifyObjects);
+        bleTest=button(root,"아두이노 TEST 신호 보내기",v->{if(MonitorService.active())MonitorService.test(this);else if(AssistantService.active())AssistantService.send("TEST\n");else ble.send("TEST\n");});
+        notifyObjects=new CheckBox(this);notifyObjects.setText("AI의 새 보행 경고를 아두이노 서보 신호로 전송");root.addView(notifyObjects);
         notifyObjects.setOnCheckedChangeListener((v,enabled)->tracker.reset());
         LinearLayout advanced=new LinearLayout(this);advanced.setOrientation(LinearLayout.VERTICAL);advanced.setVisibility(View.GONE);
         button(root,"BLE UUID 설정 열기/닫기",v->advanced.setVisibility(advanced.getVisibility()==View.GONE?View.VISIBLE:View.GONE));root.addView(advanced);
         serviceUuid=new EditText(this);serviceUuid.setSingleLine(true);serviceUuid.setHint("Service UUID");serviceUuid.setText(BleLink.DEFAULT_SERVICE);advanced.addView(serviceUuid);
         characteristicUuid=new EditText(this);characteristicUuid.setSingleLine(true);characteristicUuid.setHint("Write characteristic UUID");characteristicUuid.setText(BleLink.DEFAULT_CHARACTERISTIC);advanced.addView(characteristicUuid);
+        text(root,"버튼 음성비서 · 전화 / 주변 장소 / 질문",19);
+        text(root,"보드가 ASSIST 줄바꿈 신호를 보내거나 앱의 말하기를 누르면 듣기를 시작합니다. 음성과 질문은 Gemini로 전송됩니다. 주변 검색 시 좌표를 공개 지도 서비스로 전송하며, 연락처 번호는 휴대폰에서만 확인합니다.",13);
+        assistantStatus=text(root,"음성비서 꺼짐",15);assistantRoute=text(root,"",13);assistantHeard=text(root,"",14);assistantAnswer=text(root,"",16);
+        assistantStart=button(root,"음성비서 시작 · 선택한 HM-10 연결",v->startAssistant());
+        assistantStop=button(root,"음성비서 중지",v->AssistantService.stop(this));
+        assistantTalk=button(root,"말하기 / 답변 끊고 듣기",v->AssistantService.trigger(this));
+        button(root,"위치·연락처·전화 권한 설정",v->requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.READ_CONTACTS,Manifest.permission.CALL_PHONE},ASSISTANT_ACTION_PERMISSIONS));
+        CheckBox barge=new CheckBox(this);barge.setText("답변 중 내가 말하면 멈추고 듣기");barge.setChecked(settings.getBoolean("assistant_barge_in",true));root.addView(barge);barge.setOnCheckedChangeListener((v,enabled)->settings.edit().putBoolean("assistant_barge_in",enabled).apply());
+        text(root,"이어폰 마이크를 우선 사용합니다. 자동 끼어들기는 이어폰 또는 음향 에코 제거 지원이 필요하며, 버튼으로 끊기는 항상 사용할 수 있습니다. 대화 중 일반 카메라 음성은 멈추고 AI 경고 서보 신호는 유지합니다. 15초간 조용하면 듣기를 마칩니다.",13);
+        assistantQuestion=new EditText(this);assistantQuestion.setHint("직접 질문 · 예: 주변 병원 있어? / 엄마에게 전화해줘");assistantQuestion.setSingleLine(true);root.addView(assistantQuestion);
+        assistantAsk=button(root,"입력한 말 보내기",v->{String value=assistantQuestion.getText().toString().trim();if(!value.isEmpty()){AssistantService.ask(this,value);assistantQuestion.setText("");}});
+        assistantPlaces=new LinearLayout(this);assistantPlaces.setOrientation(LinearLayout.VERTICAL);root.addView(assistantPlaces);
+        text(root,"© OpenStreetMap contributors · 장소 이름과 좌표는 지도 데이터 기준입니다. 직선거리는 실제 이동 경로와 다르며 영업·진료 여부는 별도로 확인하세요.",12);
         localPanel=new LinearLayout(this);localPanel.setOrientation(LinearLayout.VERTICAL);root.addView(localPanel);
         text(localPanel,"로컬 AI · MiniCPM-V 4.7 1B",19);
         filesLabel=text(localPanel,"",13);refreshFiles();
@@ -234,6 +252,23 @@ public final class MainActivity extends Activity {
         text(panel,"붙여넣기의 공백·줄바꿈·보이지 않는 서식 문자는 저장 전에 정리합니다. 키의 실제 인증 여부는 Gemini에 요청할 때 확인됩니다.",13);
         EditText modelInput=new EditText(this);modelInput.setSingleLine(true);modelInput.setHint("Gemini 모델 이름");modelInput.setText(cloudModel());panel.addView(modelInput);
         text(panel,"기본 모델: "+GeminiClient.DEFAULT_MODEL+". API 키를 채팅으로 보내지 말고 이 입력칸에 입력하세요. Gemini 분석에는 인터넷과 사용 가능한 API 할당량이 필요합니다.",13);
+        TextView connectionResult=text(panel,"모델 목록 확인은 사용 가능한 이름을 조회합니다. 연결 검사는 짧은 생성 요청 1회로 실제 응답을 확인합니다.",13);
+        Button modelList=button(panel,"Google 모델 목록 확인",null);
+        Button connectionTest=button(panel,"선택 모델 연결 검사",null);
+        modelList.setOnClickListener(v->{
+            if(busy)return;ApiKeyInput.Parsed pasted=ApiKeyInput.parse(keyInput.getText().toString());if(pasted.problem!=null){keyInput.setError(pasted.problem);return;}String entered=pasted.value;
+            connectionResult.setText("Google 모델 목록 확인 중...");modelList.setEnabled(false);connectionTest.setEnabled(false);
+            runJob(()->{try(CloudNetwork.Lease internet=CloudNetwork.connect(this,cancelled::get);GeminiModels.Request request=new GeminiModels.Request(entered.isEmpty()?apiKeys.read():entered,internet.connector,cancelled::get)){
+                List<String> models=request.execute();ui(()->{connectionResult.setText("목록 조회 성공 · 실제 생성 가능 여부는 연결 검사로 확인하세요.");if(!isFinishing())new AlertDialog.Builder(this).setTitle("Google에서 조회한 모델").setItems(models.toArray(new String[0]),(d,index)->modelInput.setText(models.get(index))).setNegativeButton("닫기",null).show();});
+            }catch(Exception error){ui(()->connectionResult.setText(error.getMessage()));}finally{ui(()->{modelList.setEnabled(true);connectionTest.setEnabled(true);});}});
+        });
+        connectionTest.setOnClickListener(v->{
+            if(busy)return;ApiKeyInput.Parsed pasted=ApiKeyInput.parse(keyInput.getText().toString());if(pasted.problem!=null){keyInput.setError(pasted.problem);return;}String entered=pasted.value,selected=modelInput.getText().toString().trim();if(!GeminiClient.validModel(selected)){modelInput.setError("모델 이름을 확인하세요.");return;}
+            connectionResult.setText("선택한 모델에 짧은 생성 요청 중...");modelList.setEnabled(false);connectionTest.setEnabled(false);long started=SystemClock.elapsedRealtime();
+            runJob(()->{try(CloudNetwork.Lease internet=CloudNetwork.connect(this,cancelled::get);GeminiClient.Request request=GeminiClient.probeRequest(selected,entered.isEmpty()?apiKeys.read():entered,internet.connector,cancelled::get)){
+                cloudRequest=request;request.execute();ui(()->connectionResult.setText(String.format(Locale.KOREAN,"연결·생성 성공 · %s · %.1f초. 아래 저장을 누르면 이 모델을 적용합니다.",selected,(SystemClock.elapsedRealtime()-started)/1000.0)));
+            }catch(Exception error){ui(()->connectionResult.setText(error.getMessage()));}finally{cloudRequest=null;ui(()->{modelList.setEnabled(true);connectionTest.setEnabled(true);});}});
+        });
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Gemini 설정").setView(panel).setPositiveButton("저장",null).setNegativeButton("취소",null)
             .setNeutralButton("저장된 키 삭제",(d,w)->runJob(()->{apiKeys.clear();ui(()->{setStatus("저장된 Gemini API 키를 삭제했습니다.");if(MonitorService.active()&&cloudSelected())updateMonitor();updateControls();});})).create();
         dialog.setOnShowListener(d->{
@@ -274,6 +309,7 @@ public final class MainActivity extends Activity {
     private MonitorConfig monitorConfig(){
         Object selected=bleDevices.getSelectedItem();String address="";
         if(selected instanceof BleLink.Device&&(Build.VERSION.SDK_INT<31||checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED))address=((BleLink.Device)selected).device.getAddress();
+        if(address.isEmpty()&&AssistantService.active())address=AssistantService.snapshot().address;
         if(address.isEmpty()&&MonitorService.active()&&MonitorService.snapshot().config!=null)address=MonitorService.snapshot().config.bleAddress;
         return new MonitorConfig(ip.getText().toString().trim(),prompt.getText().toString().trim(),cloudModel(),cloudSelected(),speak.isChecked(),yoloEnabled.isChecked(),notifyObjects.isChecked(),INTERVALS[autoInterval.getSelectedItemPosition()],address,serviceUuid.getText().toString().trim(),characteristicUuid.getText().toString().trim(),selectedSource());
     }
@@ -319,7 +355,7 @@ public final class MainActivity extends Activity {
         espDiagnose.setEnabled(!busy&&!active&&selectedSource()==CameraSource.ESP);espPhoto.setEnabled(!busy&&!active&&selectedSource()==CameraSource.ESP);
         liveStart.setText(CameraSource.label(selectedSource())+" 영상 + YOLO 시작");
         bleDevices.setEnabled(!active&&!busy);serviceUuid.setEnabled(!active&&!busy);characteristicUuid.setEnabled(!active&&!busy);
-        bleScan.setEnabled(!active&&!busy);bleConnect.setEnabled(!active&&!busy);bleDisconnect.setEnabled(!active&&!busy);bleTest.setEnabled(active?state.bleReady&&!state.stopping:ble.isReady());
+        bleScan.setEnabled(!AssistantService.active()&&!active&&!busy);bleConnect.setEnabled(!AssistantService.active()&&!active&&!busy);bleDisconnect.setEnabled(!AssistantService.active()&&!active&&!busy);bleTest.setEnabled(AssistantService.ready()||(active?state.bleReady&&!state.stopping:ble.isReady()));
         speak.setEnabled(!active&&!busy);notifyObjects.setEnabled(!active&&!busy);
         localMode.setEnabled(!busy&&!state.stopping);cloudMode.setEnabled(!busy&&!state.stopping);cloudSettingsButton.setEnabled(!busy&&!state.stopping);elevenSettingsButton.setEnabled(!busy&&!state.stopping);translationPrepare.setEnabled(!busy&&!state.stopping);
         autoStart.setEnabled(!busy&&!active);autoStop.setEnabled(active&&!state.stopping);autoRetry.setEnabled(active&&!state.stopping&&state.paused);
@@ -385,7 +421,7 @@ public final class MainActivity extends Activity {
             if(frame.detectionMs<0){liveStatus.setText("첫 영상 수신 확인 · YOLO 불러오는 중...");updateControls();return;}
             YoloDetector.Box event=tracker.update(frame.boxes,SystemClock.elapsedRealtime());
             String signal="";
-            if(event!=null&&notifyObjects.isChecked()&&ble.isReady()&&ble.send("OBSTACLE\n"))signal=" · 새 물체 신호 요청: "+YoloDetector.LABELS[event.label];
+
             liveStatus.setText(String.format(Locale.ROOT,"입력 %d×%d · 수신 %.1f FPS · YOLO %dms · 물체 %d개%s%s",frame.bitmap.getWidth(),frame.bitmap.getHeight(),frame.receiveFps,frame.detectionMs,frame.boxes.size(),signal,frame.bitmap.getWidth()<416?"\n낮은 입력 해상도에서는 작은 물체 인식이 어려울 수 있습니다.":""));
             updateControls();
         });
@@ -396,6 +432,7 @@ public final class MainActivity extends Activity {
         return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
     }
     private void scanBle(){
+        if(AssistantService.active()){bleStatus.setText("기기를 바꾸려면 음성비서를 먼저 중지해주세요.");return;}
         if(!hasBlePermissions()){
             requestPermissions(Build.VERSION.SDK_INT>=31?new String[]{Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT}:new String[]{Manifest.permission.ACCESS_FINE_LOCATION},BLE_PERMISSIONS);return;
         }
@@ -406,7 +443,7 @@ public final class MainActivity extends Activity {
             ble.scan();
         }catch(SecurityException e){bleStatus.setText("주변 기기 권한을 허용하세요.");}
     }
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==CAMERA_PERMISSION){Runnable pending=cameraPermissionAction;cameraPermissionAction=null;if(checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED){if(pending!=null)pending.run();}else setStatus("카메라 권한이 필요합니다. 휴대폰 설정 → 앱 → 길잡이 → 권한에서 허용하세요.");return;}if(request==NOTIFICATION_PERMISSION){startMonitor();return;}if(request==BLE_PERMISSIONS){if(hasBlePermissions())scanBle();else bleStatus.setText("BLE 사용에 필요한 권한이 허용되지 않았습니다.");}}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==ASSISTANT_PERMISSIONS){Runnable next=assistantPermissionAction;assistantPermissionAction=null;if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED&&(Build.VERSION.SDK_INT<31||checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED)){if(next!=null)next.run();}else assistantStatus.setText("음성비서에 마이크·주변 기기 권한이 필요합니다.");return;}if(request==ASSISTANT_ACTION_PERMISSIONS){assistantStatus.setText("허용한 권한을 적용했습니다. 위치·연락처·통화는 허용된 기능만 사용할 수 있습니다.");if(AssistantService.active())startAssistant();return;}if(request==CAMERA_PERMISSION){Runnable pending=cameraPermissionAction;cameraPermissionAction=null;if(checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED){if(pending!=null)pending.run();}else setStatus("카메라 권한이 필요합니다. 휴대폰 설정 → 앱 → 길잡이 → 권한에서 허용하세요.");return;}if(request==NOTIFICATION_PERMISSION){startMonitor();return;}if(request==BLE_PERMISSIONS){if(hasBlePermissions())scanBle();else bleStatus.setText("BLE 사용에 필요한 권한이 허용되지 않았습니다.");}}
     private interface Task {void run() throws Exception;}
     private void runJob(Task task){
         if(busy)return;busy=true;cancelled.set(false);updateControls();
@@ -472,7 +509,7 @@ public final class MainActivity extends Activity {
         if(snapshot==null){setStatus("분석용 사진을 준비하지 못했습니다.");return;}
         List<YoloDetector.Box> observations=new ArrayList<>(displayedBoxes);int revision=imageRevision;
         runJob(()->{try{
-            checkCancelled();String unclear=ImageEvidence.sample(snapshot).unclearMessage();if(unclear!=null){ui(()->{result.setText(unclear);setStatus("입력 영상 확인 · 단색/노출 상태로 AI 추론을 생략했습니다.");if(read){if(cloud)eleven.speak(unclear);else say(unclear);}});return;}if(!cloud&&korean)KoreanTranslator.get(this).requireReady(()->cancelled.get()||destroyed);if(cloud)unload();else prepareModel();checkCancelled();
+            checkCancelled();String unclear=ImageEvidence.sample(snapshot).unclearMessage();if(unclear!=null){ui(()->{result.setText(unclear);setStatus("입력 영상 확인 · 단색/노출 상태로 AI 추론을 생략했습니다.");if(read&&!AssistantService.suppressGuidance(this)){if(cloud)eleven.speak(unclear);else say(unclear);}});return;}if(!cloud&&korean)KoreanTranslator.get(this).requireReady(()->cancelled.get()||destroyed);if(cloud)unload();else prepareModel();checkCancelled();
             ByteArrayOutputStream encoded=new ByteArrayOutputStream();if(!snapshot.compress(Bitmap.CompressFormat.JPEG,90,encoded))throw new IOException("분석용 사진 변환 실패");byte[] jpeg=encoded.toByteArray();
             long start=SystemClock.elapsedRealtime();ui(()->{result.setText("");setStatus(cloud?"Gemini 분석 준비 중...":"사진 분석 중 · CPU 실행");});
             String yoloResult="";
@@ -487,7 +524,7 @@ public final class MainActivity extends Activity {
             }
             String fullQuestion=question+(useYolo?"\nYOLO auxiliary observations (may be wrong, boxes are normalized image coordinates): "+yoloResult:"");
             String generated=cloud?cloudAnswer(jpeg,fullQuestion,selectedModel):localAnswer(jpeg,fullQuestion,korean);String value=SceneLanguage.grounded(korean?KoreanTranslator.get(this).translateIfNeeded(generated,()->cancelled.get()||destroyed,message->ui(()->setStatus(message))):generated);checkCancelled();
-            long elapsed=SystemClock.elapsedRealtime()-start;ui(()->{if(cancelled.get())return;result.setText(value);setStatus(String.format(Locale.ROOT,"분석 완료 · %.1f초 · %s",elapsed/1000.0,cloud?"Gemini · "+selectedModel:"로컬 실행 · "+localVlm.timings()));if(read){if(cloud)eleven.speak(value);else say(value);}});
+            long elapsed=SystemClock.elapsedRealtime()-start;ui(()->{if(cancelled.get())return;result.setText(value);setStatus(String.format(Locale.ROOT,"분석 완료 · %.1f초 · %s",elapsed/1000.0,cloud?"Gemini · "+selectedModel:"로컬 실행 · "+localVlm.timings()));if(read&&!AssistantService.suppressGuidance(this)){if(cloud)eleven.speak(value);else say(value);}});
         }finally{snapshot.recycle();}});
     }
     private String localAnswer(byte[] jpeg,String question,boolean korean) throws Exception {
@@ -504,7 +541,7 @@ public final class MainActivity extends Activity {
         }
     }
     private void say(String value){
-        if(tts==null)return;Locale locale=value.matches("(?s).*[가-힣].*")?Locale.KOREAN:Locale.ENGLISH;
+        if(tts==null||AssistantService.suppressGuidance(this))return;Locale locale=value.matches("(?s).*[가-힣].*")?Locale.KOREAN:Locale.ENGLISH;
         Set<Voice> voices=tts.getVoices();Voice selected=voices==null?null:voices.stream().filter(v->!v.isNetworkConnectionRequired()&&v.getLocale().getLanguage().equals(locale.getLanguage())).findFirst().orElse(null);
         if(selected==null){voiceStatus.setText("이 언어의 오프라인 TTS 음성을 기기 설정에서 준비하세요.");return;}
         voiceStatus.setText("휴대폰 오프라인 음성 안내 중");tts.setVoice(selected);tts.speak(value,TextToSpeech.QUEUE_FLUSH,null,"scene");
@@ -514,10 +551,32 @@ public final class MainActivity extends Activity {
         checkCancelled();ByteArrayOutputStream bytes=new ByteArrayOutputStream();if(!bitmap.compress(Bitmap.CompressFormat.JPEG,90,bytes))throw new IOException("사진 변환 실패");byte[] jpeg=bytes.toByteArray();
         runOnUiThread(()->{if(destroyed||cancelled.get()){bitmap.recycle();return;}imageBitmap=bitmap;imageBytes=jpeg;imageFromLive=false;imageRevision++;displayedBoxes=Collections.emptyList();preview.update(bitmap,displayedBoxes);setStatus("사진 준비 완료 · "+bitmap.getWidth()+"×"+bitmap.getHeight());});
     }
-    @Override protected void onStart(){super.onStart();observingMonitor=true;MonitorService.observe(monitorObserver);}
-    @Override protected void onStop(){observingMonitor=false;MonitorService.forget(monitorObserver);cancelled.set(true);abortCameraRequest();abortCloudRequest();stopLive();if(ble!=null)ble.close();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();super.onStop();}
+    private void startAssistant(){
+        if(destroyed)return;
+        ArrayList<String> missing=new ArrayList<>();
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.RECORD_AUDIO);
+        if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.BLUETOOTH_CONNECT);
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED&&!settings.getBoolean("assistant_notification_asked",false)){missing.add(Manifest.permission.POST_NOTIFICATIONS);settings.edit().putBoolean("assistant_notification_asked",true).apply();}
+        if(!missing.isEmpty()){assistantPermissionAction=this::startAssistant;requestPermissions(missing.toArray(new String[0]),ASSISTANT_PERMISSIONS);return;}
+        if(!apiKeys.hasKey()){cloudSettings();assistantStatus.setText("Gemini API 키를 저장한 후 음성비서를 시작해주세요.");return;}
+        try{MonitorConfig current=monitorConfig();ble.close();AssistantService.start(this,current.bleAddress,current.serviceUuid,current.characteristicUuid);}catch(Exception failure){assistantStatus.setText(failure.getMessage());}
+    }
+    private void onAssistantState(AssistantService.Snapshot snapshot){
+        if(destroyed||assistantStatus==null)return;
+        assistantStatus.setText(snapshot.state);assistantHeard.setText(snapshot.heard.isEmpty()?"":"들은 말: "+snapshot.heard);assistantAnswer.setText(snapshot.answer);assistantRoute.setText(snapshot.inputRoute);
+        assistantStart.setEnabled(!snapshot.enabled);assistantStop.setEnabled(snapshot.enabled);assistantTalk.setEnabled(snapshot.enabled);assistantAsk.setEnabled(snapshot.enabled);
+        if(snapshot.enabled)bleStatus.setText(snapshot.bleStatus);
+        if(snapshot.busy){if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();}
+        StringBuilder key=new StringBuilder();for(NearbyPlaces.Place place:snapshot.places)key.append(place.url()).append(place.name);
+        if(!assistantPlaceKey.equals(key.toString())){assistantPlaceKey=key.toString();assistantPlaces.removeAllViews();for(NearbyPlaces.Place place:snapshot.places)button(assistantPlaces,place.name+" · 지도 열기",v->openAssistantMap(place.url()));}
+        if(snapshot.mapRequested&&observingMonitor){String url=AssistantService.takeMap();if(!url.isEmpty())openAssistantMap(url);}
+        updateControls();
+    }
+    private void openAssistantMap(String url){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(ActivityNotFoundException error){assistantStatus.setText("지도를 열 수 있는 앱을 설치해주세요.");}}
+    @Override protected void onStart(){super.onStart();observingMonitor=true;MonitorService.observe(monitorObserver);AssistantService.observe(assistantObserver);}
+    @Override protected void onStop(){observingMonitor=false;MonitorService.forget(monitorObserver);AssistantService.forget(assistantObserver);cancelled.set(true);abortCameraRequest();abortCloudRequest();stopLive();if(ble!=null)ble.close();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();super.onStop();}
     @Override protected void onDestroy(){
-        observingMonitor=false;MonitorService.forget(monitorObserver);destroyed=true;cancelled.set(true);if(eleven!=null)eleven.close();if(tts!=null){tts.stop();tts.shutdown();}
+        observingMonitor=false;MonitorService.forget(monitorObserver);AssistantService.forget(assistantObserver);destroyed=true;cancelled.set(true);if(eleven!=null)eleven.close();if(tts!=null){tts.stop();tts.shutdown();}
         abortCameraRequest();abortCloudRequest();stopLive();if(ble!=null)ble.close();
         jobs.execute(()->{if(!MonitorService.active())unload();else closePhotoYolo();});jobs.shutdown();super.onDestroy();
     }

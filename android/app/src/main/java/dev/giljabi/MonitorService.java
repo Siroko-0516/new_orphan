@@ -60,6 +60,7 @@ public final class MonitorService extends Service {
     private final ContinuousGate gate=new ContinuousGate();
     private final WalkingSceneGate sceneChanges=new WalkingSceneGate();
     private final NarrationMemory narration=new NarrationMemory();
+    private final NarrationMemory motorMemory=new NarrationMemory();
     private static final class GuidePhoto {final byte[] jpeg;final long at;GuidePhoto(byte[] jpeg,long at){this.jpeg=jpeg;this.at=at;}}
     private final ArrayDeque<GuidePhoto> recentPhotos=new ArrayDeque<>();
     private GuidePhoto previousReview;
@@ -101,20 +102,20 @@ public final class MonitorService extends Service {
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         String action=intent==null?STOP:intent.getAction();
         if(STOP.equals(action)){if(!monitoring&&!stopping&&config==null){cleanupQueued=true;cleanupComplete=true;worker.shutdown();stopSelf();}else stopMonitoring();return START_NOT_STICKY;}
-        if(TEST.equals(action)){if(monitoring&&!stopping)ble.send("TEST\n");return START_NOT_STICKY;}
-        if(RETRY.equals(action)){if(monitoring&&!stopping){synchronized(modeLock){gate.reset();sceneChanges.reset();narration.reset();}closeRequest();status="장면 설명 재시작 대기 중...";publish();}return START_NOT_STICKY;}
+        if(TEST.equals(action)){if(monitoring&&!stopping)sendBoard("TEST\n");return START_NOT_STICKY;}
+        if(RETRY.equals(action)){if(monitoring&&!stopping){synchronized(modeLock){gate.reset();sceneChanges.reset();narration.reset();motorMemory.reset();}closeRequest();status="장면 설명 재시작 대기 중...";publish();}return START_NOT_STICKY;}
         try{
             MonitorConfig next=MonitorConfig.read(intent);next.validate();
             if(UPDATE.equals(action)&&monitoring&&!stopping){
                 if(next.source!=config.source||!next.address.equals(config.address))throw new IOException("영상 입력을 바꾸려면 먼저 실시간 실행을 중지하세요.");
-                synchronized(modeLock){config=next;gate.reset();sceneChanges.reset();narration.reset();}closeRequest();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();lastSpoken="";result="";status=(next.cloud?"Gemini":"로컬 AI")+"로 전환 중 · 이전 분석 처리 후 최신 프레임을 사용합니다.";publish();return START_NOT_STICKY;
+                synchronized(modeLock){config=next;gate.reset();sceneChanges.reset();narration.reset();motorMemory.reset();}closeRequest();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();lastSpoken="";result="";status=(next.cloud?"Gemini":"로컬 AI")+"로 전환 중 · 이전 분석 처리 후 최신 프레임을 사용합니다.";publish();return START_NOT_STICKY;
             }
             if(!START.equals(action)||monitoring||stopping||cleanupQueued)return START_NOT_STICKY;
             config=next;
             int types=Build.VERSION.SDK_INT>=29?ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK:0;
             if(Build.VERSION.SDK_INT>=29&&(next.source==CameraSource.ESP||!next.bleAddress.isEmpty()))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
             if(Build.VERSION.SDK_INT>=30&&CameraSource.phone(next.source))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
-            ServiceCompat.startForeground(this,NOTIFICATION,notification(),types);foreground=true;monitoring=true;gate.start();sceneChanges.reset();narration.reset();acquireLocks();
+            ServiceCompat.startForeground(this,NOTIFICATION,notification(),types);foreground=true;monitoring=true;gate.start();sceneChanges.reset();narration.reset();motorMemory.reset();acquireLocks();
             tts=new TextToSpeech(getApplicationContext(),code->main.post(()->{ttsReady=code==TextToSpeech.SUCCESS;if(!ttsReady){speechStatus="오프라인 음성 초기화 실패 · 화면 결과로 확인하세요.";publish();}else if(pendingOffline!=null){String text=pendingOffline;java.util.function.BooleanSupplier valid=pendingOfflineValid;pendingOffline=null;pendingOfflineValid=null;speakOffline(text,valid);}}));
             tts.setOnUtteranceProgressListener(new UtteranceProgressListener(){
                 @Override public void onStart(String id){main.post(()->{if(announcement==null||!id.equals(announcement.nativeId))return;if(!activeSpeechValid.getAsBoolean()){if(tts!=null)tts.stop();offlineSpeaking=false;main.removeCallbacks(nativeSpeechCheck);return;}speechStarted(announcement.message);});}
@@ -165,7 +166,7 @@ public final class MonitorService extends Service {
         if(!framePosted.compareAndSet(false,true))return;
         main.post(()->{
             framePosted.set(false);if(!monitoring||stopping)return;FramePacket packet=latest;if(packet==null)return;
-            if(packet.detectionMs>=0&&packet.sequence>lastTrackedSequence){lastTrackedSequence=packet.sequence;YoloDetector.Box bleEvent=tracker.update(packet.boxes,SystemClock.elapsedRealtime());if(bleEvent!=null&&config.notify&&ble.isReady())ble.send("OBSTACLE\n");}
+            if(packet.detectionMs>=0&&packet.sequence>lastTrackedSequence)lastTrackedSequence=packet.sequence;
 
             for(Observer observer:OBSERVERS){
                 ViewFrame view=null;
@@ -231,9 +232,10 @@ public final class MonitorService extends Service {
                     WalkingGuidance.speechAge(frame.receivedAt,SystemClock.elapsedRealtime(),next.started);
                 if(!valid.getAsBoolean()){status="상황이 달라졌거나 오래된 설명이라 음성 안내를 생략했습니다.";publish();return;}
                 if(announcement!=null&&!announcement.started&&(!translated.urgent||announcement.urgent)&&activeSpeechValid.getAsBoolean()&&NarrationMemory.equivalent(announcement.message,translated.message)){status="같은 상황의 음성 안내를 준비하거나 읽고 있습니다.";publish();return;}
+                if(chosen.notify&&motorMemory.eligible(decision.episode,decision.stateKey,translated.message,translated.urgent)&&sendBoard("OBSTACLE\n"))motorMemory.offer(decision.episode,decision.stateKey,translated.message,translated.urgent);
                 if(!narration.eligible(decision.episode,decision.stateKey,translated.message,translated.urgent)){status="같은 보행 상황은 반복해서 안내하지 않습니다.";publish();return;}
                 result=translated.message;status=String.format(Locale.ROOT,"%s 보행 상황 확인 · %.1f초",chosen.cloud?"Gemini":"로컬 AI",elapsed/1000.0)+(!chosen.cloud?" · "+LocalVlm.get(this).timings():"");
-                if(chosen.speak){announcement=next;speakGuidance(translated.message,chosen.cloud,valid,frame.receivedAt);}publish();
+                if(chosen.speak&&!AssistantService.suppressGuidance(this)){announcement=next;speakGuidance(translated.message,chosen.cloud,valid,frame.receivedAt);}publish();
             });
         }catch(CancellationException ignored){}
         catch(Throwable failure){
@@ -250,7 +252,11 @@ public final class MonitorService extends Service {
     private void progress(ContinuousGate.Ticket ticket,String text){main.post(()->{if(monitoring&&!stopping&&gate.current(ticket)){status=text;publish();}});}
     private void check(ContinuousGate.Ticket ticket){if(!gate.current(ticket))throw new CancellationException();}
     private void closeRequest(){GeminiClient.Request current=request;if(current!=null)new Thread(current::close,"monitor-gemini-close").start();}
+    static void assistantTakesBle(String address){MonitorService s=instance;if(s!=null&&s.config!=null&&s.config.bleAddress.equals(address)&&s.ble!=null)s.ble.disconnect();}
+    static void pauseForAssistant(){MonitorService s=instance;if(s==null)return;s.activeSpeechValid=()->false;s.pendingOffline=null;s.pendingOfflineValid=null;s.offlineSpeaking=false;s.main.removeCallbacks(s.nativeSpeechCheck);if(s.tts!=null)s.tts.stop();if(s.eleven!=null)s.eleven.stop();}
+    private boolean sendBoard(String command){return AssistantService.ownsBle(config.bleAddress)?AssistantService.send(command):ble.send(command);}
     private void connectBle(){
+        if(config!=null&&AssistantService.ownsBle(config.bleAddress)){bleStatus=AssistantService.snapshot().bleStatus;publish();return;}
         if(config==null||config.bleAddress.isEmpty()||ble.isReady()||ble.isConnecting())return;
         if(Build.VERSION.SDK_INT>=31&&ContextCompat.checkSelfPermission(this,Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){bleStatus="아두이노 연결에 주변 기기 권한이 필요합니다.";publish();return;}
         try{BluetoothAdapter adapter=ble.adapter();if(adapter==null||!adapter.isEnabled()){bleStatus="아두이노 연결을 위해 블루투스를 켜세요.";publish();return;}
@@ -293,7 +299,7 @@ public final class MonitorService extends Service {
         return new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_camera).setContentTitle(title).setContentText(status).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setCategory(NotificationCompat.CATEGORY_SERVICE).addAction(android.R.drawable.ic_media_pause,"중지",stop).build();
     }
     private void publish(){
-        if(instance!=this)return;last=new Snapshot(monitoring||stopping,stopping,gate.isPaused(),ble!=null&&ble.isReady(),config,status,result,bleStatus,speechStatus);
+        if(instance!=this)return;last=new Snapshot(monitoring||stopping,stopping,gate.isPaused(),(config!=null&&AssistantService.ownsBle(config.bleAddress)?AssistantService.ready():ble!=null&&ble.isReady()),config,status,result,bleStatus,speechStatus);
         for(Observer observer:OBSERVERS)observer.state(last);
         if(foreground&&SystemClock.elapsedRealtime()-lastNotice>=1000){lastNotice=SystemClock.elapsedRealtime();NotificationManager manager=getSystemService(NotificationManager.class);if(manager!=null&&(Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED))manager.notify(NOTIFICATION,notification());}
     }
