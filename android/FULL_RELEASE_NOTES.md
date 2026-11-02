@@ -6,7 +6,9 @@
 
 서보 신호 D2, 버튼 D3, HM-10 D0/D1의 **UNO v3 전체 코드**와 BLE 없이 모터만 시험하는 **SG90 D2 단독 시험 코드**를 릴리스에 함께 제공합니다. 실물 서보가 움직이지 않는 문제는 별도 전원·공통 GND·접촉·서보 상태 확인이 필요합니다.
 
-[연결 관리·검사 범위·배선·API 사용량 안내](https://github.com/Siroko-0516/new_orphan/blob/main/android/BLE_CONNECTION.md). ChatGPT 구독 사용량과 OpenAI API 잔액은 별개이며, 이번 버전은 GPT API 공급자를 추가하지 않습니다. Gemini 429 한도와 503 서버 혼잡을 구분합니다. 개인 키를 APK에 넣지 않습니다. 서명이 다르면 삭제 후 설치가 필요하고 삭제 시 키·설정·준비한 모델이 초기화됩니다.
+[연결 관리·검사 범위·배선·API 사용량 안내](https://github.com/Siroko-0516/new_orphan/blob/main/android/BLE_CONNECTION.md). ChatGPT 구독 사용량과 OpenAI API 잔액은 별개이며, 이번 버전은 GPT API 공급자를 추가하지 않습니다. Gemini 429 한도와 503 서버 혼잡을 구분합니다. 개인 키를 APK에 넣지 않습니다. **공개 0.9.1은 공개 0.9.0과 서명이 달라 기존 앱 삭제 후 설치해야 합니다. 삭제하면 키·설정·준비한 모델이 초기화됩니다. BLE 연결·TEST는 AI 키 없이 확인할 수 있습니다.**
+
+단위 검사 258개·lint 오류 0, Android 15 서비스 수명·카메라·VAD 검사와 기존 네이티브 검사를 통과했습니다. 공개 APK(1,828,257,709바이트)를 다시 받아 체크섬·v2 서명·16KB 정렬·모델 해시를 확인했습니다. [검증 데이터](https://github.com/Siroko-0516/new_orphan/blob/main/android/BLE_CONNECTION_VALIDATION.json).
 
 **0.9.0 · HM-10 버튼 음성비서 / 말하다 끊고 듣기 / Gemini 연결 검사**
 

@@ -1,6 +1,20 @@
 # 길잡이 테스트 APK
 
-## 최신 · 버튼 음성비서 / 답변 끊고 듣기 / Gemini 연결 검사 · 0.9.0-full
+## 최신 · AI 중지 후 BLE 연결 유지 · 0.9.1-full
+
+**[giljabi-0.9.1-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.1-full/giljabi-0.9.1-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.1-full)
+
+- AI·음성비서 중지나 화면 이동에 BLE 연결까지 닫히던 경로를 수정했습니다. 별도 보드 연결 서비스가 연결을 유지하며 앱/보드 연결 알림의 **BLE 연결 해제**로 종료합니다. 강제 종료·전원 단절 등은 별도입니다.
+- 카메라·비서 실행 상태와 관계없이 TEST를 실제 연결 중인 보드로 보냅니다. BLE 연결과 TEST에는 AI 키나 마이크 권한이 필요하지 않습니다.
+- **BLE 검색 → HMSoft 선택 → 선택한 BLE 기기 연결 → TEST**로 먼저 확인하세요. 음성비서는 별도로 시작합니다. 기존 로컬 모델·Gemini·음성·카메라 입력은 포함합니다.
+- 단위 검사 **258개**, lint 오류 0, Android 15 서비스 수명·카메라·VAD 및 기존 네이티브 검사 통과. 공개 APK의 체크섬·v2 서명·16KB 정렬·내장 모델 해시를 다시 확인했습니다. 실물 무선 연결·서보 동작은 별도 확인이 필요합니다.
+- 파일은 **1,828,257,709바이트(약 1.83GB)**입니다. **공개 0.9.0과 서명이 달라 삭제 후 설치해야 하며 키·설정·준비한 모델이 초기화됩니다.**
+
+[연결 사용법·검사 범위](../android/BLE_CONNECTION.md) · [검증 데이터](../android/BLE_CONNECTION_VALIDATION.json) · [UNO v3](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.1-full/Giljabi-UNO-HM10-SG90-v3.zip) · [SG90 D2 단독 시험](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.1-full/Giljabi-SG90-D2-Test-v1.zip).
+
+SHA-256: `e4613a7c880dd852fef613c51cea5616c86ff746ca15aec5cda2efd3cf24567d`.
+
+## 이전 · 버튼 음성비서 / 답변 끊고 듣기 / Gemini 연결 검사 · 0.9.0-full
 
 **[giljabi-0.9.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.0-full/giljabi-0.9.0-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.0-full)
 

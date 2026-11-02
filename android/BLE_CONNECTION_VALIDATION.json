@@ -18,11 +18,85 @@
     "explicit disconnect cancels retries",
     "ASSIST without enabled assistant does not start recording"
   ],
-  "android15": "pending CI",
-  "published_apk": "pending CI",
+  "android15": {
+    "result": "passed",
+    "ci_run": 41472004084,
+    "scope": "real foreground-service lifetimes, Camera2/YOLO, assistant idle and VAD; no physical HM-10 peer"
+  },
+  "published_apk": {
+    "version": "0.9.1-full",
+    "version_code": 17,
+    "name": "giljabi-0.9.1-full-debug.apk",
+    "bytes": 1828257709,
+    "sha256": "e4613a7c880dd852fef613c51cea5616c86ff746ca15aec5cda2efd3cf24567d",
+    "ci_run": 41472004084,
+    "apk_v2_verified": true,
+    "certificate_sha256": "7c27013dd07d2b4e435d9c7860a65127f5412b35b72e047beb2b8ece1853c8cb",
+    "same_certificate_as_0_9_0": false,
+    "zipalign_16k": true,
+    "service_type_masks": {
+      "board": "0x10",
+      "assistant": "0x8a"
+    },
+    "models": {
+      "model.gguf": {
+        "bytes": 672003680,
+        "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d"
+      },
+      "mmproj.gguf": {
+        "bytes": 1110117984,
+        "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900"
+      }
+    },
+    "elf_load_alignments": {
+      "lib/arm64-v8a/libc++_shared.so": 16384,
+      "lib/arm64-v8a/libggml-base.so": 16384,
+      "lib/arm64-v8a/libggml-cpu-android_armv8.0_1.so": 16384,
+      "lib/arm64-v8a/libggml-cpu-android_armv8.2_1.so": 16384,
+      "lib/arm64-v8a/libggml-cpu-android_armv8.2_2.so": 16384,
+      "lib/arm64-v8a/libggml-cpu-android_armv8.6_1.so": 16384,
+      "lib/arm64-v8a/libggml-vulkan.so": 16384,
+      "lib/arm64-v8a/libggml.so": 16384,
+      "lib/arm64-v8a/libgiljabi_native.so": 16384,
+      "lib/arm64-v8a/libllama-common.so": 16384,
+      "lib/arm64-v8a/libllama.so": 16384,
+      "lib/arm64-v8a/libmtmd.so": 16384,
+      "lib/arm64-v8a/libonnxruntime.so": 16384,
+      "lib/arm64-v8a/libonnxruntime4j_jni.so": 16384,
+      "lib/arm64-v8a/libtranslate_jni.so": 16384
+    },
+    "vad_sha256": "2623a2953f6ff3d2c1e61740c6cdb7168133479b267dfef114a4a3cc5bdd788f",
+    "checks": {
+      "tests": 258,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "lint_errors": 0
+    },
+    "native_checks": {
+      "template_failure_reproduced": true,
+      "complete_turn_rendering_passed": true,
+      "jni_exception_guard_passed": true
+    },
+    "guidance_checks": {
+      "host_only": true,
+      "physical_phone_latency_verified": false,
+      "production_jni_used": true,
+      "shared_walking_prompt_parser_used": true,
+      "guidance_protocol_passed": true,
+      "fixture": "public engine landscape 1.jpg",
+      "scenery_alert_suppressed": true,
+      "guidance_reply": "{\"speak\":true,\"message\":\"A rocky outcrop in the foreground partially blocks the view of the valley.\",\"urgency\":\"notice\"}",
+      "english_caption": "A rugged mountain viewpoint frames a deep, green-flooded valley winding between steep, forested cliffs under a bright sky.",
+      "host_phase_seconds": "prepare=1.205 image=11.181 generation=0.869",
+      "host_caption_seconds": "11.074"
+    },
+    "credential_pattern_check_passed": true
+  },
   "not_verified": [
     "physical HM-10 wireless connection on user phone",
     "servo supply, PWM and movement on user wiring",
     "OpenAI API billing balance; no OpenAI provider added"
-  ]
+  ],
+  "source": "5c4110818507079bf082f5235929cb2566234773"
 }
