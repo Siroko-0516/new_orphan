@@ -1,6 +1,23 @@
 # 길잡이 테스트 APK
 
-## 최신 · 보행 상황 판단 / 이미지 GPU / 한국어 / 음성 대체 · 0.8.2-full
+## 최신 · 버튼 음성비서 / 답변 끊고 듣기 / Gemini 연결 검사 · 0.9.0-full
+
+**[giljabi-0.9.0-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.0-full/giljabi-0.9.0-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.0-full)
+
+- HM-10의 `ASSIST` 버튼 알림으로 듣기를 시작합니다. 답변 중 버튼/말소리로 끊고 다시 질문할 수 있으며 이전 요청·음성을 취소합니다. 자동 끼어들기는 이어폰·반향 제거 상태에 따라 실제 기기에서 확인해야 합니다.
+- 저장된 연락처 전화는 실제 음성 확인 후에만 요청합니다. GPS와 실제 OpenStreetMap 기록으로 주변 병원·약국 등을 검색하며 별도 유료 지도 키는 필요하지 않습니다.
+- **503 서버 혼잡을 인터넷·모델 오류와 구분**합니다. Gemini 설정의 **Google 모델 목록 확인 → 선택 모델 연결 검사 → 저장**으로 확인하세요. 모델 목록 성공과 생성 성공은 다르며 서버 혼잡 자체를 앱이 없애지는 못합니다.
+- Gemini/음성비서는 기존 ElevenLabs 고정 여자·남자 음성을 우선 사용하고 실패하면 기본 TTS로 대체합니다. **로컬 AI는 계속 기본 TTS만 사용합니다.** 카메라 입력·모델 내장·조용한 보행 판단을 유지하며 새 AI 보행 경고에 서보 신호를 보냅니다.
+- 단위 검사 **246개**, lint 오류 0, Android 15 카메라·실제 VAD 모델·비서 대기 서비스 검사와 기존 GGUF 네이티브 검사를 통과했습니다. 실제 보드·이어폰·위치·SIM 통화의 통합 동작과 지도 서버 응답은 실기 확인이 필요합니다. 로컬 AI 2초 이하 달성은 미측정입니다.
+- 파일은 **1,828,254,669바이트(약 1.83GB)**이며 여유 공간 6GB 이상을 권장합니다. 공개 APK의 체크섬·v2 서명·16KB 정렬·내장 모델 해시를 다시 확인했습니다.
+- **공개 0.8.2와 서명이 달라 기존 앱을 삭제한 후 설치해야 합니다. 삭제하면 키·설정·준비된 모델이 초기화됩니다.**
+- 설치 후 **Gemini 개인 키 저장 → BLE 검색·HM-10 선택 → 음성비서 시작**을 누르고 필요한 마이크·주변 기기·위치·연락처·전화 권한을 허용합니다. 무선이어폰은 휴대폰에 별도로 연결합니다.
+
+[음성비서 사용법·검증 범위](../android/ASSISTANT.md) · [UNO 코드 ZIP](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.0-full/Giljabi-UNO-HM10-SG90-v1.zip) · [친구용 배선 설명](../arduino/hm10_sg90_button/README.md) · [검증 데이터](../android/ASSISTANT_VALIDATION.json).
+
+SHA-256: `11f4ef1e56e133db29986c36b01b3ea6b6ed04927df123f4ea3e95a32421ffaf`.
+
+## 이전 · 보행 상황 판단 / 이미지 GPU / 한국어 / 음성 대체 · 0.8.2-full
 
 **[giljabi-0.8.2-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.8.2-full/giljabi-0.8.2-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.8.2-full)
 

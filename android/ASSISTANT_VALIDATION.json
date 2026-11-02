@@ -16,9 +16,91 @@
     "host_seconds": 0.024,
     "device_audio_routing_tested": false
   },
-  "android15_instrumentation": "pending CI",
-  "uno_compilation": "pending CI",
-  "published_apk": "pending CI",
+  "android15_instrumentation": {
+    "result": "passed",
+    "ci_run": 41423398210,
+    "checks": [
+      "bundled Silero VAD actual inference on silence",
+      "assistant foreground service stays idle after Home and stops explicitly",
+      "back/front Camera2 JPEG and YOLO inference",
+      "camera service after Home/screen-off and subsequent camera release"
+    ]
+  },
+  "uno_compilation": {
+    "result": "passed",
+    "board": "arduino:avr:uno",
+    "avr_core": "1.8.6",
+    "servo_library": "1.2.2",
+    "ci_run": 41423398210
+  },
+  "published_apk": {
+    "name": "giljabi-0.9.0-full-debug.apk",
+    "sha256": "11f4ef1e56e133db29986c36b01b3ea6b6ed04927df123f4ea3e95a32421ffaf",
+    "bytes": 1828254669,
+    "ci_run": 41423398210,
+    "apk_v2_verified": true,
+    "certificate_sha256": "3b56798409c97a02666d4e708537e37cdd0da2f6fa629cfcac810b91263b2df3",
+    "same_certificate_as_0_8_2": false,
+    "zipalign_16k": true,
+    "version_code": 16,
+    "version": "0.9.0-full",
+    "assistant_fgs_type_mask": "0x9a",
+    "elf_load_alignments": {
+      "lib/arm64-v8a/libc++_shared.so": 16384,
+      "lib/arm64-v8a/libggml-base.so": 16384,
+      "lib/arm64-v8a/libggml-cpu-android_armv8.0_1.so": 16384,
+      "lib/arm64-v8a/libggml-cpu-android_armv8.2_1.so": 16384,
+      "lib/arm64-v8a/libggml-cpu-android_armv8.2_2.so": 16384,
+      "lib/arm64-v8a/libggml-cpu-android_armv8.6_1.so": 16384,
+      "lib/arm64-v8a/libggml-vulkan.so": 16384,
+      "lib/arm64-v8a/libggml.so": 16384,
+      "lib/arm64-v8a/libgiljabi_native.so": 16384,
+      "lib/arm64-v8a/libllama-common.so": 16384,
+      "lib/arm64-v8a/libllama.so": 16384,
+      "lib/arm64-v8a/libmtmd.so": 16384,
+      "lib/arm64-v8a/libonnxruntime.so": 16384,
+      "lib/arm64-v8a/libonnxruntime4j_jni.so": 16384,
+      "lib/arm64-v8a/libtranslate_jni.so": 16384
+    },
+    "models": {
+      "model.gguf": {
+        "bytes": 672003680,
+        "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d"
+      },
+      "mmproj.gguf": {
+        "bytes": 1110117984,
+        "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900"
+      }
+    },
+    "vad_sha256": "2623a2953f6ff3d2c1e61740c6cdb7168133479b267dfef114a4a3cc5bdd788f",
+    "checks": {
+      "tests": 246,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "lint_errors": 0
+    },
+    "native_checks": {
+      "template_failure_reproduced": true,
+      "complete_turn_rendering_passed": true,
+      "jni_exception_guard_passed": true
+    },
+    "guidance_checks": {
+      "host_only": true,
+      "physical_phone_latency_verified": false,
+      "production_jni_used": true,
+      "shared_walking_prompt_parser_used": true,
+      "guidance_protocol_passed": true,
+      "fixture": "public engine landscape 1.jpg",
+      "scenery_alert_suppressed": true,
+      "guidance_reply": "{\"speak\":true,\"message\":\"A rocky outcrop in the foreground blocks the view of the valley.\",\"urgency\":\"notice\"}",
+      "english_caption": "A rugged mountain viewpoint frames a winding river and steep valleys, with snow-dusted peaks under a bright sky.",
+      "host_phase_seconds": "prepare=3.986 image=9.261 generation=0.635",
+      "host_caption_seconds": "8.870"
+    },
+    "assistant_classes_and_fixed_voices_in_dex": true,
+    "credential_pattern_check_passed": true
+  },
   "gemini_live": {
     "models_list_http": 200,
     "text_probe_model": "gemini-3.1-flash-lite",
@@ -34,5 +116,6 @@
     "real location and Overpass live provider",
     "SIM calls and contact lookup on user device",
     "local VLM under 2 seconds"
-  ]
+  ],
+  "source": "d81efcc71469823298c84712fb3697578ee4bcc8"
 }
