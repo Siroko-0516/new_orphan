@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // UNO R3 + HM-10 UART + SG90 + momentary button. Read README before wiring.
+#include <Arduino.h>
 #include <SoftwareSerial.h>
 #include <Servo.h>
 #include <string.h>
 
 const uint8_t SERVO_PIN = 5;
 const uint8_t BUTTON_PIN = 2;
+// true: powered 3-pin button module (S/V/G, with its own resistor).
+// false: bare 2-pin switch between D2 and GND.
+const bool BUTTON_MODULE = true;
 const uint8_t CENTER_ANGLE = 90;
 const uint8_t LEFT_ANGLE = 80;
 const uint8_t RIGHT_ANGLE = 100;
@@ -20,6 +24,7 @@ unsigned long phaseAt = 0;
 const unsigned long phaseMs[] = {180, 160, 160, 260};
 bool rawButton = HIGH;
 bool stableButton = HIGH;
+uint8_t releasedLevel = HIGH;
 unsigned long buttonChangedAt = 0;
 bool assistantPending = false;
 unsigned long lastAssistAt = 0;
@@ -56,15 +61,23 @@ void updateWarning() {
 }
 
 void setup() {
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_PIN, BUTTON_MODULE ? INPUT : INPUT_PULLUP);
   pinMode(SERVO_PIN, OUTPUT);
   digitalWrite(SERVO_PIN, LOW); // No unsolicited movement at boot.
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
   Serial.begin(115200);
   hm10.begin(9600);
+  // Release the button while powering up/resetting. This accepts either
+  // active-HIGH or active-LOW modules, and avoids a false press at startup.
+  delay(200);
+  releasedLevel = digitalRead(BUTTON_PIN);
+  rawButton = stableButton = releasedLevel;
+  buttonChangedAt = millis();
   lastAssistAt = millis() - 1000UL;
   Serial.println("Giljabi HM-10 / SG90 / ASSIST ready");
+  Serial.print("Button released level: ");
+  Serial.println(releasedLevel == HIGH ? "HIGH" : "LOW");
 }
 
 void loop() {
@@ -72,7 +85,7 @@ void loop() {
   if (sample != rawButton) { rawButton = sample; buttonChangedAt = millis(); }
   if (sample != stableButton && millis() - buttonChangedAt >= 40UL) {
     stableButton = sample;
-    if (stableButton == LOW) assistantPending = true;
+    if (stableButton != releasedLevel) assistantPending = true;
   }
   updateWarning();
   if (!moving && assistantPending && millis() - lastAssistAt >= 800UL) {

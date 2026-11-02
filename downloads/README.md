@@ -13,7 +13,7 @@
 - **공개 0.8.2와 서명이 달라 기존 앱을 삭제한 후 설치해야 합니다. 삭제하면 키·설정·준비된 모델이 초기화됩니다.**
 - 설치 후 **Gemini 개인 키 저장 → BLE 검색·HM-10 선택 → 음성비서 시작**을 누르고 필요한 마이크·주변 기기·위치·연락처·전화 권한을 허용합니다. 무선이어폰은 휴대폰에 별도로 연결합니다.
 
-[음성비서 사용법·검증 범위](../android/ASSISTANT.md) · [UNO 코드 ZIP](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.0-full/Giljabi-UNO-HM10-SG90-v1.zip) · [친구용 배선 설명](../arduino/hm10_sg90_button/README.md) · [검증 데이터](../android/ASSISTANT_VALIDATION.json).
+[음성비서 사용법·검증 범위](../android/ASSISTANT.md) · [3핀 버튼용 UNO v2 ZIP](https://raw.githubusercontent.com/Siroko-0516/new_orphan/main/downloads/Giljabi-UNO-HM10-SG90-v2.zip) · [친구용 배선 설명](../arduino/hm10_sg90_button/README.md) · [검증 데이터](../android/ASSISTANT_VALIDATION.json).
 
 SHA-256: `11f4ef1e56e133db29986c36b01b3ea6b6ed04927df123f4ea3e95a32421ffaf`.
 

@@ -1,0 +1,29 @@
+name: UNO button and servo firmware
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'arduino/hm10_sg90_button/**'
+      - '.github/workflows/uno-firmware.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-and-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.3.1'
+      - name: Check press, release, hold and command behavior
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I arduino/hm10_sg90_button/tests arduino/hm10_sg90_button/tests/firmware_test.cpp -o "$RUNNER_TEMP/uno-firmware-test"
+          "$RUNNER_TEMP/uno-firmware-test"
+      - name: Compile for the actual UNO board
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr@1.8.6
+          arduino-cli lib install Servo@1.2.2
+          arduino-cli compile --fqbn arduino:avr:uno arduino/hm10_sg90_button
