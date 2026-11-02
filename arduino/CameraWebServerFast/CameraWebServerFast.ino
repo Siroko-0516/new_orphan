@@ -59,13 +59,15 @@ void setup() {
     return;
   }
   if (sensor->id.PID == OV3660_PID) {
-    sensor->set_vflip(sensor, 1);
     sensor->set_brightness(sensor, 1);
     sensor->set_saturation(sensor, -2);
   }
+  // Flip the source JPEG on both axes, including the app's captured AI frames.
   if (sensor->set_framesize(sensor, FRAMESIZE_QVGA) != 0 ||
-      sensor->set_quality(sensor, 20) != 0) {
-    Serial.println("Camera QVGA/quality setting failed");
+      sensor->set_quality(sensor, 20) != 0 ||
+      sensor->set_vflip(sensor, 1) != 0 ||
+      sensor->set_hmirror(sensor, 1) != 0) {
+    Serial.println("Camera QVGA/quality/orientation setting failed");
     return;
   }
 
@@ -85,6 +87,7 @@ void setup() {
   Serial.printf("Camera PID: 0x%04x; PSRAM: %s\n",
                 static_cast<unsigned int>(sensor->id.PID), hasPsram ? "yes" : "no");
   Serial.println("Default: 320x240 JPEG, quality 20");
+  Serial.println("Orientation: vertical flip ON, horizontal mirror ON");
   Serial.print("WiFi: ");
   Serial.println(apName);
   Serial.print("Page: http://");
