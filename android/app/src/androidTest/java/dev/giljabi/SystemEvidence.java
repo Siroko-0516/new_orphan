@@ -10,7 +10,8 @@ final class SystemEvidence {
     static void preserve(File file)throws IOException{
         if(!file.getName().matches("[a-z0-9.-]+")||file.length()==0)throw new IOException("Invalid test evidence file");
         UiAutomation shell=InstrumentationRegistry.getInstrumentation().getUiAutomation();
-        ParcelFileDescriptor[] pipe=shell.executeShellCommandRw("sh -c 'cat > /data/local/tmp/giljabi-"+file.getName()+"'");
+        // UiAutomation passes tokens directly to exec; dd avoids shell quoting/redirection.
+        ParcelFileDescriptor[] pipe=shell.executeShellCommandRw("dd of=/data/local/tmp/giljabi-"+file.getName());
         try(InputStream source=new FileInputStream(file);OutputStream output=new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])){
             byte[] buffer=new byte[8192];for(int n;(n=source.read(buffer))!=-1;)output.write(buffer,0,n);
         }
