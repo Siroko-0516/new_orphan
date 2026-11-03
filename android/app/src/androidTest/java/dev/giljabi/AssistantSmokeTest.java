@@ -28,7 +28,7 @@ public class AssistantSmokeTest {
     }
     @Test public void realManualMicrophoneWaitsForButtonAndProducesWav()throws Exception{
         Probe probe=new Probe();AssistantMic mic=new AssistantMic(context(),probe);
-        try{
+        try(ActivityScenario<MainActivity> activity=ActivityScenario.launch(MainActivity.class)){
             mic.start();assertTrue("microphone did not start",probe.ready.await(10,TimeUnit.SECONDS));assertNull(probe.failure);assertNotNull(probe.route);
             boolean ended=probe.done.await(16,TimeUnit.SECONDS);
             if(ended){assertNull(probe.failure);assertTrue("only the hard size limit may end a recording without a button",probe.limit);}
@@ -39,7 +39,7 @@ public class AssistantSmokeTest {
     }
     @Test public void cancellingInputLetsTheNextButtonTurnAcquireMicrophone()throws Exception{
         Probe first=new Probe(),next=new Probe();AssistantMic a=new AssistantMic(context(),first),b=new AssistantMic(context(),next);
-        try{
+        try(ActivityScenario<MainActivity> activity=ActivityScenario.launch(MainActivity.class)){
             a.start();assertTrue(first.ready.await(10,TimeUnit.SECONDS));assertNull(first.failure);a.close();
             b.start();assertTrue("previous recording kept the input device",next.ready.await(10,TimeUnit.SECONDS));assertNull(next.failure);assertNotNull(next.route);
             Thread.sleep(350);b.finish();assertTrue(next.done.await(10,TimeUnit.SECONDS));assertNull(next.failure);assertNotNull(next.wav);
