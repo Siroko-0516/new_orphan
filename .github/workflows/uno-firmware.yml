@@ -6,6 +6,8 @@ on:
       - 'arduino/hm10_sg90_button/**'
       - 'arduino/sg90_d2_test/**'
       - '.github/workflows/uno-firmware.yml'
+      - 'downloads/Giljabi-UNO-HM10-SG90-v4-UART115200-test.zip'
+      - 'downloads/Giljabi-UNO-HM10-SG90-v4-UART115200-test.zip.sha256'
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,3 +31,18 @@ jobs:
           arduino-cli lib install Servo@1.2.2
           arduino-cli compile --fqbn arduino:avr:uno arduino/hm10_sg90_button
           arduino-cli compile --fqbn arduino:avr:uno arduino/sg90_d2_test
+      - name: Verify and compile the exact UART 115200 diagnostic download
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,zipfile,hashlib
+          p=Path('downloads/Giljabi-UNO-HM10-SG90-v4-UART115200-test.zip')
+          assert hashlib.sha256(p.read_bytes()).hexdigest()==Path(str(p)+'.sha256').read_text().split()[0]
+          source=Path('arduino/hm10_sg90_button/hm10_sg90_button.ino').read_text()
+          assert source.count('hm10.begin(9600);')==1
+          with zipfile.ZipFile(p) as z:
+              assert set(z.namelist())=={'hm10_115200_test/hm10_115200_test.ino','hm10_115200_test/README.md'}
+              assert z.read('hm10_115200_test/hm10_115200_test.ino').decode()==source.replace('hm10.begin(9600);','hm10.begin(115200);')
+              z.extractall(Path(os.environ['RUNNER_TEMP'])/'uart-diagnostic')
+          PY
+          arduino-cli compile --fqbn arduino:avr:uno "$RUNNER_TEMP/uart-diagnostic/hm10_115200_test"
