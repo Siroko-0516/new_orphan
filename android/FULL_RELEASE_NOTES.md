@@ -14,6 +14,8 @@
 
 단위 검사 **295개**, lint 오류 0, Android 15 위치 API(명시적으로 주입한 에뮬레이터 좌표)·녹음·대기 서비스·카메라 검사, UNO 컴파일과 기존 네이티브 검사를 통과했습니다. 공개 APK를 직접 내려받아 체크섬·v2 서명·16KB ZIP/ELF 정렬·모델 해시·새 위치/GPT 코드 포함을 확인했습니다. 실제 SIM 통화·GPS 수신·무선이어폰·HM-10 통합과 개인 OpenAI 키의 실제 응답은 기기에서 확인해야 합니다. [검증 데이터](https://github.com/Siroko-0516/new_orphan/blob/main/android/PHONE_LOCATION_GPT_VALIDATION.json).
 
+SHA-256: `ca00af824ec7e62f175f4da4decedad96f542193cebe0aae8054e9d0d5260c74`.
+
 **0.9.2 · 버튼으로 녹음 시작·전송·답변 중단**
 
 물리 버튼이나 앱 버튼을 **한 번 누르면 녹음 시작 → 말을 마치고 다시 누르면 전송**합니다. Gemini가 답변 중일 때 버튼을 누르면 이전 답변·요청을 취소하고 새 녹음을 시작합니다. 새 질문도 두 번째 버튼으로 전송합니다.
