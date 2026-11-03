@@ -64,9 +64,10 @@ public class PhoneSystemSmokeTest {
         try(ActivityScenario<MainActivity> activity=ActivityScenario.launch(MainActivity.class)){
             contact=insertContact();
             PhoneProbe app=new PhoneProbe(context);
-            AssistantContacts.Contact found=app.findPhoneContact(NAME);
+            AssistantCommands.Command command=AssistantCommands.parse(NAME+"에게 전화해줘",false);
+            assertEquals(AssistantCommands.Kind.CALL,command.kind);
+            AssistantContacts.Contact found=app.findPhoneContact(command.target);
             assertEquals(NUMBER,found.number);
-            assertEquals(AssistantCommands.Kind.CALL,AssistantCommands.parse(NAME+"에게 전화해줘",false).kind);
             // This calls the production method with the app's CALL_PHONE permission, with no Telecom mock.
             app.placePhoneCall(found.number);
             long deadline=SystemClock.elapsedRealtime()+15000;
