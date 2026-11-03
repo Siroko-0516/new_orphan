@@ -76,7 +76,7 @@ public final class MonitorService extends Service {
     private final AtomicBoolean framePosted=new AtomicBoolean();
     private volatile MonitorConfig config;
     private volatile FramePacket latest;
-    private volatile GeminiClient.Request request;
+    private volatile CloudRequest request;
     private volatile boolean monitoring,stopping;
     private volatile int cameraGeneration;
     private ScheduledFuture<?> repeat;
@@ -108,7 +108,7 @@ public final class MonitorService extends Service {
             MonitorConfig next=MonitorConfig.read(intent);next.validate();
             if(UPDATE.equals(action)&&monitoring&&!stopping){
                 if(next.source!=config.source||!next.address.equals(config.address))throw new IOException("영상 입력을 바꾸려면 먼저 실시간 실행을 중지하세요.");
-                synchronized(modeLock){config=next;gate.reset();sceneChanges.reset();narration.reset();motorMemory.reset();}closeRequest();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();lastSpoken="";result="";status=(next.cloud?"Gemini":"로컬 AI")+"로 전환 중 · 이전 분석 처리 후 최신 프레임을 사용합니다.";publish();return START_NOT_STICKY;
+                synchronized(modeLock){config=next;gate.reset();sceneChanges.reset();narration.reset();motorMemory.reset();}closeRequest();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();lastSpoken="";result="";status=AiProvider.name(next.provider)+"로 전환 중 · 이전 분석 처리 후 최신 프레임을 사용합니다.";publish();return START_NOT_STICKY;
             }
             if(!START.equals(action)||monitoring||stopping||cleanupQueued)return START_NOT_STICKY;
             config=next;
@@ -208,10 +208,10 @@ public final class MonitorService extends Service {
             }
             String answer;
             if(chosen.cloud){
-                LocalVlm.get(this).release();check(ticket);String key;try{key=new ApiKeyStore(this).read();}catch(IOException error){throw new ConfigurationException(error);}
+                LocalVlm.get(this).release();check(ticket);String key;try{key=AiProvider.keys(this,chosen.provider).read();}catch(IOException error){throw new ConfigurationException(error);}
                 try(CloudNetwork.Lease internet=CloudNetwork.connect(this,()->!gate.current(ticket))){
-                    check(ticket);progress(ticket,"Gemini가 이전·최신 사진의 보행 상황을 확인 중 · "+internet.description);
-                    try(GeminiClient.Request pending=new GeminiClient.Request(chosen.model,key,images,question,internet.connector,()->!gate.current(ticket))){request=pending;check(ticket);answer=pending.execute();}finally{request=null;}
+                    check(ticket);progress(ticket,AiProvider.name(chosen.provider)+"가 이전·최신 사진의 보행 상황을 확인 중 · "+internet.description);
+                    try(CloudRequest pending=CloudAi.vision(chosen.provider,chosen.model,key,images,question,true,internet.connector,()->!gate.current(ticket))){request=pending;check(ticket);answer=pending.execute();}finally{request=null;}
                 }
             }else {KoreanTranslator.get(this).requireReady(()->!gate.current(ticket));answer=LocalVlm.get(this).describeGuidance(frame.jpeg,question,()->!gate.current(ticket),text->progress(ticket,text));}
             check(ticket);WalkingGuidance.Reply parsed=WalkingGuidance.parse(answer);
@@ -234,14 +234,14 @@ public final class MonitorService extends Service {
                 if(announcement!=null&&!announcement.started&&(!translated.urgent||announcement.urgent)&&activeSpeechValid.getAsBoolean()&&NarrationMemory.equivalent(announcement.message,translated.message)){status="같은 상황의 음성 안내를 준비하거나 읽고 있습니다.";publish();return;}
                 if(chosen.notify&&motorMemory.eligible(decision.episode,decision.stateKey,translated.message,translated.urgent)&&sendBoard("OBSTACLE\n"))motorMemory.offer(decision.episode,decision.stateKey,translated.message,translated.urgent);
                 if(!narration.eligible(decision.episode,decision.stateKey,translated.message,translated.urgent)){status="같은 보행 상황은 반복해서 안내하지 않습니다.";publish();return;}
-                result=translated.message;status=String.format(Locale.ROOT,"%s 보행 상황 확인 · %.1f초",chosen.cloud?"Gemini":"로컬 AI",elapsed/1000.0)+(!chosen.cloud?" · "+LocalVlm.get(this).timings():"");
+                result=translated.message;status=String.format(Locale.ROOT,"%s 보행 상황 확인 · %.1f초",AiProvider.name(chosen.provider),elapsed/1000.0)+(!chosen.cloud?" · "+LocalVlm.get(this).timings():"");
                 if(chosen.speak&&!AssistantService.suppressGuidance(this)){announcement=next;speakGuidance(translated.message,chosen.cloud,valid,frame.receivedAt);}publish();
             });
         }catch(CancellationException ignored){}
         catch(Throwable failure){
             if(gate.current(ticket)){
-                CrashDiagnostics.record(chosen.cloud?"Gemini 보행 분석":"로컬 AI 보행 분석",failure);
-                boolean pause=!chosen.cloud||failure instanceof ConfigurationException||failure instanceof OutOfMemoryError||(failure instanceof GeminiClient.ApiException&&((GeminiClient.ApiException)failure).status<500);
+                CrashDiagnostics.record(AiProvider.name(chosen.provider)+" 보행 분석",failure);
+                int http=CloudAi.status(failure);boolean pause=!chosen.cloud||failure instanceof ConfigurationException||failure instanceof OutOfMemoryError||(http>0&&http<500);
                 if(pause)gate.pause(ticket);else gate.defer(ticket,SystemClock.elapsedRealtime()+10000);
                 if(!chosen.cloud)LocalVlm.get(this).release();
                 String error=(pause?"보행 설명 일시 중지 · 설정 수정 또는 재시도: ":"보행 설명 연결 오류 · 10초 후 최신 사진으로 재시도: ")+message(failure);
@@ -251,7 +251,7 @@ public final class MonitorService extends Service {
     }
     private void progress(ContinuousGate.Ticket ticket,String text){main.post(()->{if(monitoring&&!stopping&&gate.current(ticket)){status=text;publish();}});}
     private void check(ContinuousGate.Ticket ticket){if(!gate.current(ticket))throw new CancellationException();}
-    private void closeRequest(){GeminiClient.Request current=request;if(current!=null)new Thread(current::close,"monitor-gemini-close").start();}
+    private void closeRequest(){CloudRequest current=request;if(current!=null)new Thread(current::close,"monitor-cloud-close").start();}
     static void pauseForAssistant(){MonitorService s=instance;if(s==null)return;s.activeSpeechValid=()->false;s.pendingOffline=null;s.pendingOfflineValid=null;s.offlineSpeaking=false;s.main.removeCallbacks(s.nativeSpeechCheck);if(s.tts!=null)s.tts.stop();if(s.eleven!=null)s.eleven.stop();}
     private boolean sendBoard(String command){return BoardService.send(command);}
     private void speechStarted(String text){
@@ -284,7 +284,7 @@ public final class MonitorService extends Service {
         offlineSpeaking=true;main.removeCallbacks(nativeSpeechCheck);main.postDelayed(nativeSpeechCheck,100);speechStatus="기본 한국어 음성 준비 중";publish();
     }
     private Notification notification(){
-        String title="길잡이 · "+(config!=null&&config.cloud?"Gemini":"로컬 AI")+(stopping?" 중지 처리 중":" 실시간 실행 중");
+        String title="길잡이 · "+(config==null?"로컬 AI":AiProvider.name(config.provider))+(stopping?" 중지 처리 중":" 실시간 실행 중");
         PendingIntent open=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         PendingIntent stop=PendingIntent.getService(this,1,new Intent(this,MonitorService.class).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_camera).setContentTitle(title).setContentText(status).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setCategory(NotificationCompat.CATEGORY_SERVICE).addAction(android.R.drawable.ic_media_pause,"중지",stop).build();

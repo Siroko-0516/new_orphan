@@ -1,0 +1,31 @@
+{
+  "version": "0.9.3-full",
+  "version_code": 19,
+  "local_unit_tests": {
+    "tests": 295,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint_errors": 0,
+  "android_test_apk_compiled": true,
+  "regressions": [
+    "device routing for current-location and nearby-place requests",
+    "local commands without an AI key",
+    "audible one-use confirmation before system dialing",
+    "cancelled, unheard or denied calls never dial",
+    "maps failover and real-coordinate fallback without invented places",
+    "OpenAI JPEG/strict walking JSON/audio multipart/cancellation/key protection",
+    "provider config survives service Intent with no API key",
+    "camera and assistant controls coexist"
+  ],
+  "ci_android15_and_full_apk": "pending release build",
+  "openai_live": "not tested; no OpenAI key configured in this environment",
+  "live_map_services": "not tested; mocked responses and fallback URLs checked",
+  "not_verified": [
+    "physical user GPS reception",
+    "real SIM call connection; telephone gateway is mocked",
+    "physical HM-10 and wireless earbuds",
+    "live OpenAI responses and per-account model permissions"
+  ]
+}

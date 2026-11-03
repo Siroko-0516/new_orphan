@@ -27,11 +27,11 @@ public class AssistantService extends Service {
     private static final int NOTICE=61;
     interface Observer {void state(Snapshot snapshot);}
     static final class Snapshot {
-        final boolean enabled,ready,busy,mapRequested,buttonEnabled;final String address,state,heard,answer,bleStatus,inputRoute,buttonLabel;final List<NearbyPlaces.Place> places;
-        Snapshot(boolean e,boolean r,boolean b,String address,String state,String heard,String answer,String ble,String route,List<NearbyPlaces.Place> places,boolean map,String label,boolean canPress){enabled=e;ready=r;busy=b;this.address=address;this.state=state;this.heard=heard;this.answer=answer;bleStatus=ble;inputRoute=route;this.places=Collections.unmodifiableList(new ArrayList<>(places));mapRequested=map;buttonLabel=label;buttonEnabled=canPress;}
+        final boolean enabled,ready,busy,mapRequested,buttonEnabled;final String address,state,heard,answer,bleStatus,inputRoute,buttonLabel,locationText,mapUrl;final List<NearbyPlaces.Place> places;
+        Snapshot(boolean e,boolean r,boolean b,String address,String state,String heard,String answer,String ble,String route,List<NearbyPlaces.Place> places,boolean map,String label,boolean canPress,String location,String mapLink){enabled=e;ready=r;busy=b;this.address=address;this.state=state;this.heard=heard;this.answer=answer;bleStatus=ble;inputRoute=route;this.places=Collections.unmodifiableList(new ArrayList<>(places));mapRequested=map;buttonLabel=label;buttonEnabled=canPress;locationText=location;mapUrl=mapLink;}
     }
     private static volatile AssistantService instance;
-    private static volatile Snapshot last=new Snapshot(false,false,false,"","음성비서 꺼짐","","","BLE 미연결","",Collections.emptyList(),false,"버튼 누르고 말하기",true);
+    private static volatile Snapshot last=new Snapshot(false,false,false,"","음성비서 꺼짐","","","BLE 미연결","",Collections.emptyList(),false,"버튼 누르고 말하기",true,"","");
     private static final CopyOnWriteArrayList<Observer> OBSERVERS=new CopyOnWriteArrayList<>();
     static Snapshot snapshot(){return last;}
     static boolean active(){return last.enabled;}
@@ -51,6 +51,7 @@ public class AssistantService extends Service {
     static void trigger(Context c){if(active())c.startService(new Intent(c,AssistantService.class).setAction(TRIGGER));}
     static void ask(Context c,String value){if(active())c.startService(new Intent(c,AssistantService.class).setAction(ASK).putExtra("text",value));}
     static String takeMap(){AssistantService s=instance;if(s==null)return "";s.mapRequested=false;s.publish();return s.mapUrl;}
+    static String mapLink(){AssistantService s=instance;return s==null?"":s.mapUrl;}
 
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor(r->new Thread(r,"assistant-request"));
@@ -61,12 +62,12 @@ public class AssistantService extends Service {
     private String address="";
     private final BoardService.Observer boardObserver=s->{address=s.address;bleStatus=s.status;publish();};
     private String state="음성비서 준비 중",heard="",answer="",bleStatus="BLE 미연결",inputRoute="";
-    private AssistantInput microphone;private AssistantLocation location;private volatile GeminiClient.Request request;private volatile PlacesClient.Request placesRequest;private Future<?> task;
+    private AssistantInput microphone;private AssistantLocation location;private AssistantPosition positionLookup;private volatile CloudRequest request;private volatile PlacesClient.Request placesRequest;private Future<?> task;
     private ElevenSpeech eleven;private TextToSpeech tts;private boolean ttsReady,foreground,focusHeld;
     private AudioManager audio;private AudioFocusRequest focus;private PowerManager.WakeLock wake;
     private boolean communicationRoute,scoRoute;private int previousAudioMode;
     private Consumer<String> outputStarted;private String pendingNative;
-    private List<NearbyPlaces.Place> places=Collections.emptyList();private String mapUrl="";private boolean mapRequested;
+    private List<NearbyPlaces.Place> places=Collections.emptyList();private String mapUrl="",locationText="";private boolean mapRequested;
     private final ArrayDeque<String> history=new ArrayDeque<>();
     private static final class PendingCall {final AssistantContacts.Contact contact;final AssistantCallGuard guard=new AssistantCallGuard(SystemClock.elapsedRealtime());PendingCall(AssistantContacts.Contact c){contact=c;}}
     private PendingCall pendingCall;
@@ -79,11 +80,11 @@ public class AssistantService extends Service {
         tts=new TextToSpeech(this,code->main.post(()->{ttsReady=code==TextToSpeech.SUCCESS;if(ttsReady&&pendingNative!=null){String message=pendingNative;pendingNative=null;nativeSpeak(message);}else if(!ttsReady&&pendingNative!=null){pendingNative=null;endDialogue("한국어 기본 음성을 준비해주세요.");}}));
         tts.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
         tts.setOnUtteranceProgressListener(new UtteranceProgressListener(){
-            @Override public void onStart(String id){main.post(()->{if(validOutput(id)&&outputStarted!=null)outputStarted.accept(answer);});}
+            @Override public void onStart(String id){main.post(()->{if(validOutput(id))playbackStarted();});}
             @Override public void onDone(String id){main.post(()->{if(validOutput(id))speechDone();});}
             @Override public void onError(String id){main.post(()->{if(validOutput(id))endDialogue("기본 한국어 음성을 재생하지 못했어요.");});}
         });
-        eleven=new ElevenSpeech(this,message->{if(alive&&speaking){state=message;publish();}},this::nativeSpeak,message->{if(speaking&&outputStarted!=null)outputStarted.accept(message);},this::speechDone,true);
+        eleven=new ElevenSpeech(this,message->{if(alive&&speaking){state=message;publish();}},this::nativeSpeak,message->playbackStarted(),this::speechDone,true);
         BoardService.observe(boardObserver);
         PowerManager pm=getSystemService(PowerManager.class);if(pm!=null){wake=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"giljabi:assistant");wake.setReferenceCounted(false);}
     }
@@ -103,14 +104,15 @@ public class AssistantService extends Service {
         return START_NOT_STICKY;
     }
     private boolean permission(String name){return ContextCompat.checkSelfPermission(this,name)==PackageManager.PERMISSION_GRANTED;}
-    private boolean prepareDialogue(){
+    private boolean prepareDialogue(){return prepareDialogue(true);}
+    private boolean prepareDialogue(boolean cloudNeeded){
         if(!alive||!permission(Manifest.permission.RECORD_AUDIO)){state="마이크 권한을 허용한 뒤 다시 시작해주세요.";publish();return false;}
-        if(!hasAssistantKey()){state="Gemini API 키를 설정해주세요.";publish();return false;}
+        if(cloudNeeded&&!hasAssistantKey()){state=AiProvider.name(AiProvider.assistant(this))+" API 키를 설정해주세요.";publish();return false;}
         if(!focusHeld){focusHeld=audio.requestAudioFocus(focus)==AudioManager.AUDIOFOCUS_REQUEST_GRANTED;if(!focusHeld){state="통화 또는 다른 앱의 오디오 사용이 끝난 뒤 다시 눌러주세요.";publish();return false;}}
         try{beginCommunicationRoute();}catch(RuntimeException error){state="이어폰·휴대폰 오디오 연결을 확인해주세요.";publish();return false;}
         dialogue=true;if(wake!=null)wake.acquire(240000);MonitorService.pauseForAssistant();return true;
     }
-    boolean hasAssistantKey(){return new ApiKeyStore(this).hasKey();}
+    boolean hasAssistantKey(){return AiProvider.keys(this,AiProvider.assistant(this)).hasKey();}
     private void beginCommunicationRoute(){
         if(communicationRoute)return;
         previousAudioMode=audio.getMode();audio.setMode(AudioManager.MODE_IN_COMMUNICATION);communicationRoute=true;
@@ -162,18 +164,23 @@ public class AssistantService extends Service {
     private void closeInput(){microphoneEpoch++;AssistantInput old=microphone;microphone=null;recordedWav=null;inputRoute="";if(old!=null)old.close();}
     private void typed(String value){
         cancelRequests();cancelOutput();closeInput();
-        if(!prepareDialogue()){endDialogue(state);return;}
+        if(!prepareDialogue(AssistantCommands.parse(value,pendingCall!=null).kind==AssistantCommands.Kind.CHAT)){endDialogue(state);return;}
         turns.waiting();heard=value;route(value,null,epoch);publish();
     }
     private String history(){StringBuilder b=new StringBuilder();for(String turn:history)b.append(turn).append('\n');return b.toString();}
     private void remember(String user,String reply){history.addLast("사용자: "+user+"\n답변: "+reply);while(history.size()>4)history.removeFirst();}
     void submitAudio(byte[] wav){
-        turns.waiting();final long turn=epoch;waiting=true;state="녹음을 전송했어요. Gemini가 말씀을 확인하고 있어요.";publish();
+        String provider=AiProvider.assistant(this);
+        turns.waiting();final long turn=epoch;waiting=true;state="녹음을 전송하고 있어요. "+AiProvider.name(provider)+"가 말씀을 확인해요.";publish();
         final String previous=history();
         task=io.submit(()->{
             try(CloudNetwork.Lease internet=CloudNetwork.connect(this,()->!valid(turn))){
-                String model=getSharedPreferences("ai-settings",MODE_PRIVATE).getString("gemini_model",GeminiClient.DEFAULT_MODEL);
-                try(GeminiClient.Request pending=GeminiClient.assistantRequest(model,new ApiKeyStore(this).read(),wav,null,previous,internet.connector,()->!valid(turn))){request=pending;String raw=pending.execute();GeminiClient.AssistantReply reply=GeminiClient.assistantReply(raw);main.post(()->{if(valid(turn)){heard=reply.transcript;if(heard.isEmpty()){speak("잘 듣지 못했어요. 다시 말씀해주세요.",null);return;}route(heard,reply.answer,turn);publish();}});}finally{request=null;}
+                if(AiProvider.OPENAI.equals(provider)){
+                    try(CloudRequest pending=OpenAiClient.transcribeRequest(AiProvider.keys(this,provider).read(),wav,internet.connector,()->!valid(turn))){request=pending;String transcript=pending.execute();main.post(()->{if(valid(turn)){heard=transcript;route(transcript,null,turn);publish();}});}finally{request=null;}
+                }else{
+                    String model=AiProvider.model(this,provider);
+                    try(GeminiClient.Request pending=GeminiClient.assistantRequest(model,AiProvider.keys(this,provider).read(),wav,null,previous,internet.connector,()->!valid(turn))){request=pending;String raw=pending.execute();GeminiClient.AssistantReply reply=GeminiClient.assistantReply(raw);main.post(()->{if(valid(turn)){heard=reply.transcript;if(heard.isEmpty()){speak("잘 듣지 못했어요. 다시 말씀해주세요.",null);return;}route(heard,reply.answer,turn);publish();}});}finally{request=null;}
+                }
             }catch(Exception error){fail(turn,error);}
         });
     }
@@ -184,38 +191,68 @@ public class AssistantService extends Service {
         if(command.kind==AssistantCommands.Kind.CONFIRM){confirmCall();return;}
         pendingCall=null;
         if(command.kind==AssistantCommands.Kind.CALL){findContact(command.target,turn);return;}
+        if(command.kind==AssistantCommands.Kind.CALL_HELP){speak("연락처에 저장된 이름을 말해주세요. 예를 들어, 엄마에게 전화해줘라고 말하면 확인 후 전화를 요청해요.",null);return;}
+        if(command.kind==AssistantCommands.Kind.LOCATION){findCurrentLocation(turn);return;}
         if(command.kind==AssistantCommands.Kind.NEARBY){findPlaces(command.target,turn);return;}
-        if(command.kind==AssistantCommands.Kind.MAP){if(mapUrl.isEmpty())speak("먼저 주변 병원이나 약국을 검색해주세요.",null);else{mapRequested=true;state="앱 화면 또는 알림을 열면 지도로 연결해요.";speak("지도는 길잡이 앱 화면이나 실행 알림을 열어 확인할 수 있어요.",null);publish();}return;}
+        if(command.kind==AssistantCommands.Kind.MAP){if(mapUrl.isEmpty())speak("먼저 내 위치를 알려달라고 하거나 주변 병원을 검색해주세요.",null);else{mapRequested=true;state="앱 화면 또는 알림을 열면 지도로 연결해요.";speak("현재 위치의 지도 검색을 준비했어요. 길잡이 화면이나 알림을 열어 확인할 수 있어요.",null);publish();}return;}
         if(generated!=null){String message=AssistantCommands.speechText(generated);if(message.isEmpty()||!message.matches("(?s).*[가-힣].*"))message="이 질문의 답변을 확인하지 못했어요. 조금 다르게 말씀해주세요.";remember(utterance,message);speak(message,null);return;}
-        final String previous=history();waiting=true;state="Gemini가 답변 중이에요.";publish();
-        task=io.submit(()->{try(CloudNetwork.Lease internet=CloudNetwork.connect(this,()->!valid(turn))){String model=getSharedPreferences("ai-settings",MODE_PRIVATE).getString("gemini_model",GeminiClient.DEFAULT_MODEL);try(GeminiClient.Request pending=GeminiClient.assistantRequest(model,new ApiKeyStore(this).read(),null,utterance,previous,internet.connector,()->!valid(turn))){request=pending;GeminiClient.AssistantReply reply=GeminiClient.assistantReply(pending.execute());main.post(()->{if(valid(turn)){String message=reply.answer;if(message.isEmpty())message="답변을 확인하지 못했어요.";remember(utterance,message);speak(message,null);}});}finally{request=null;}}catch(Exception error){fail(turn,error);}});
+        final String previous=history(),provider=AiProvider.assistant(this);waiting=true;state=AiProvider.name(provider)+"가 답변을 준비하고 있어요.";publish();
+        task=io.submit(()->{
+            try(CloudNetwork.Lease internet=CloudNetwork.connect(this,()->!valid(turn))){
+                String model=AiProvider.model(this,provider),key=AiProvider.keys(this,provider).read(),reply;
+                if(AiProvider.OPENAI.equals(provider))try(CloudRequest pending=OpenAiClient.textRequest(model,key,utterance,previous,internet.connector,()->!valid(turn))){request=pending;reply=pending.execute();}
+                else try(GeminiClient.Request pending=GeminiClient.assistantRequest(model,key,null,utterance,previous,internet.connector,()->!valid(turn))){request=pending;reply=GeminiClient.assistantReply(pending.execute()).answer;}
+                String result=reply;main.post(()->{if(valid(turn)){String message=result.isEmpty()?"답변을 확인하지 못했어요.":result;remember(utterance,message);speak(message,null);}});
+            }catch(Exception error){fail(turn,error);}finally{request=null;}
+        });
     }
     private void findContact(String target,long turn){
         if(!permission(Manifest.permission.CALL_PHONE)){speak("앱의 연락처·전화 권한 버튼에서 통화 권한을 허용해주세요.",null);return;}
         waiting=true;state="휴대폰 연락처를 확인하고 있어요.";publish();
-        task=io.submit(()->{try{AssistantContacts.Contact contact=AssistantContacts.find(this,target);main.post(()->{if(!valid(turn))return;PendingCall call=new PendingCall(contact);pendingCall=call;speak(contact.name+"에게 전화할까요? 버튼을 눌러 네 또는 취소라고 말한 뒤 다시 눌러주세요.",message->{if(pendingCall==call)call.guard.playbackStarted();});});}catch(Exception error){fail(turn,error);}});
+        task=io.submit(()->{try{AssistantContacts.Contact contact=findPhoneContact(target);main.post(()->{if(!valid(turn))return;PendingCall call=new PendingCall(contact);pendingCall=call;speak(contact.name+"에게 전화할까요? 버튼을 눌러 네 또는 취소라고 말한 뒤 다시 눌러주세요.",message->{if(pendingCall==call)call.guard.playbackStarted();});});}catch(Exception error){fail(turn,error);}});
     }
+    AssistantContacts.Contact findPhoneContact(String target)throws IOException{return AssistantContacts.find(this,target);}
+    void placePhoneCall(String number){TelecomManager telecom=getSystemService(TelecomManager.class);if(telecom==null)throw new IllegalStateException("No telephony service");telecom.placeCall(Uri.fromParts("tel",number,null),new Bundle());}
+    void playbackStarted(){if(alive&&dialogue&&speaking&&outputStarted!=null)outputStarted.accept(answer);}
     private void confirmCall(){
         PendingCall call=pendingCall;pendingCall=null;
         if(call==null||!call.guard.confirm(SystemClock.elapsedRealtime())){speak("전화 확인이 만료됐어요. 누구에게 전화할지 다시 말씀해주세요.",null);return;}
         String number=AssistantCommands.phone(call.contact.number);
         if(number.isEmpty()||!permission(Manifest.permission.CALL_PHONE)){speak("통화 권한이나 연락처 번호를 확인해주세요.",null);return;}
         endDialogue("전화 연결 요청 중 · "+call.contact.name);
-        try{TelecomManager telecom=getSystemService(TelecomManager.class);if(telecom==null)throw new IllegalStateException();telecom.placeCall(Uri.fromParts("tel",number,null),new Bundle());state="전화 연결을 요청했어요. 실제 연결 상태는 휴대폰 전화 앱에서 확인하세요.";publish();}
+        try{placePhoneCall(number);state="전화 연결을 요청했어요. 실제 연결 상태는 휴대폰 전화 앱에서 확인하세요.";publish();}
         catch(RuntimeException error){if(prepareDialogue())speak("전화를 연결하지 못했어요. 통화 권한과 기본 통화 SIM 설정을 확인해주세요.",null);}
     }
+    void locate(AssistantLocation.Callback callback){location=new AssistantLocation(this,callback);location.start(this);}
+    void resolveAddress(Location fix,Consumer<String> callback){positionLookup=new AssistantPosition(callback);positionLookup.start(this,fix);}
+    private void findCurrentLocation(long turn){
+        mapRequested=false;mapUrl="";locationText="";places=Collections.emptyList();waiting=true;state="휴대폰의 현재 위치를 확인하고 있어요.";publish();
+        locate(new AssistantLocation.Callback(){
+            @Override public void found(Location fix){
+                location=null;if(!valid(turn))return;
+                locationText=AssistantPosition.summary(fix);mapUrl=AssistantPosition.url(fix);places=Collections.emptyList();
+                state="현재 좌표 확인 · 주소를 확인하고 있어요.";publish();
+                resolveAddress(fix,address->{positionLookup=null;if(!valid(turn))return;
+                    speak(address.isEmpty()?"휴대폰의 위치를 확인했어요. 주소를 불러오지 못했지만, 지도 열어줘라고 말하면 확인한 위치를 지도에서 볼 수 있어요.":(AssistantLocation.ageSeconds(fix)>30?"휴대폰이 최근 확인한 위치는 대략 ":"현재 위치는 대략 ")+address+" 근처예요.",null);});
+            }
+            @Override public void failed(String message){location=null;if(valid(turn)){locationText="";mapUrl="";speak(message,null);}}
+        });
+    }
     private void findPlaces(String category,long turn){
-        waiting=true;state="현재 위치를 확인하고 있어요.";publish();
-        location=new AssistantLocation(this,new AssistantLocation.Callback(){
-            @Override public void found(Location fix){location=null;if(!valid(turn))return;state="주변 "+category+" 지도 데이터를 검색하고 있어요.";publish();
-                task=io.submit(()->{try(CloudNetwork.Lease internet=CloudNetwork.connect(AssistantService.this,()->!valid(turn));PlacesClient.Request pending=new PlacesClient.Request(category,fix.getLatitude(),fix.getLongitude(),internet.connector,()->!valid(turn))){placesRequest=pending;List<NearbyPlaces.Place> found=pending.execute();main.post(()->{if(valid(turn)){places=found;mapUrl=found.isEmpty()?"https://www.google.com/maps/search/?api=1&query="+Uri.encode(category+" near "+fix.getLatitude()+","+fix.getLongitude()):found.get(0).url();String message=NearbyPlaces.spoken(category,found);remember(heard,message);speak(message,null);publish();}});}catch(Exception error){fail(turn,error);}finally{placesRequest=null;}});
+        mapRequested=false;mapUrl="";locationText="";places=Collections.emptyList();waiting=true;state="현재 위치를 확인하고 있어요.";publish();
+        locate(new AssistantLocation.Callback(){
+            @Override public void found(Location fix){location=null;if(!valid(turn))return;locationText=AssistantPosition.summary(fix);try{mapUrl=NearbyPlaces.searchUrl(category,fix.getLatitude(),fix.getLongitude());}catch(IOException ignored){mapUrl="";}state="주변 "+category+" 지도 데이터를 검색하고 있어요.";publish();
+                task=io.submit(()->{try{List<NearbyPlaces.Place> found=searchPlaces(category,fix,turn);main.post(()->{if(valid(turn)){places=found;if(!found.isEmpty())mapUrl=found.get(0).url();String message=NearbyPlaces.spoken(category,found);speak(message,null);publish();}});}catch(Exception error){main.post(()->{if(valid(turn)){places=Collections.emptyList();speak("지도 검색 서버가 응답하지 않아 병원이나 장소 목록을 확인하지 못했어요. 현재 위치의 "+category+" 지도 검색은 준비했어요. 지도 열어줘라고 말하거나 앱의 지도 버튼을 눌러주세요.",null);}});}finally{placesRequest=null;}});
             }
             @Override public void failed(String message){location=null;if(valid(turn))speak(message,null);}
-        });location.start(this);
+        });
+    }
+    List<NearbyPlaces.Place> searchPlaces(String category,Location fix,long turn)throws Exception{
+        try(CloudNetwork.Lease internet=CloudNetwork.connect(this,()->!valid(turn));PlacesClient.Request pending=new PlacesClient.Request(category,fix.getLatitude(),fix.getLongitude(),internet.connector,()->!valid(turn))){placesRequest=pending;return pending.execute();}
     }
     private boolean valid(long turn){return alive&&dialogue&&epoch==turn;}
     private void fail(long turn,Exception failure){main.post(()->{if(valid(turn))speak(failure.getMessage()==null?"요청을 처리하지 못했어요. 다시 말씀해주세요.":failure.getMessage(),null);});}
-    private void cancelRequests(){epoch++;waiting=false;if(task!=null)task.cancel(true);task=null;GeminiClient.Request r=request;PlacesClient.Request p=placesRequest;request=null;placesRequest=null;if(r!=null)new Thread(r::close,"assistant-cancel").start();if(p!=null)new Thread(p::close,"places-cancel").start();if(location!=null){location.close();location=null;}}
+    private void cancelRequests(){epoch++;waiting=false;if(task!=null)task.cancel(true);task=null;CloudRequest r=request;PlacesClient.Request p=placesRequest;request=null;placesRequest=null;if(r!=null)new Thread(r::close,"assistant-cancel").start();if(p!=null)new Thread(p::close,"places-cancel").start();if(location!=null){location.close();location=null;}if(positionLookup!=null){positionLookup.close();positionLookup=null;}}
     private void cancelOutput(){outputEpoch++;speaking=false;pendingNative=null;outputStarted=null;if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();}
     void speak(String raw,Consumer<String> started){
         cancelOutput();if(!alive||!dialogue)return;
@@ -248,7 +285,7 @@ public class AssistantService extends Service {
         PendingIntent stop=PendingIntent.getService(this,612,new Intent(this,AssistantService.class).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentTitle("길잡이 음성비서").setContentText(turns.label()).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).addAction(android.R.drawable.ic_btn_speak_now,turns.label(),trigger).addAction(android.R.drawable.ic_media_pause,"비서 중지",stop).build();
     }
-    private void publish(){if(instance!=this)return;last=new Snapshot(alive&&foreground,BoardService.ready(),dialogue,address,state,heard,answer,bleStatus,inputRoute,places,mapRequested,turns.label(),turns.enabled());for(Observer o:OBSERVERS)o.state(last);if(foreground){NotificationManager n=getSystemService(NotificationManager.class);if(n!=null)n.notify(NOTICE,notification());}}
+    private void publish(){if(instance!=this)return;last=new Snapshot(alive&&foreground,BoardService.ready(),dialogue,address,state,heard,answer,bleStatus,inputRoute,places,mapRequested,turns.label(),turns.enabled(),locationText,mapUrl);for(Observer o:OBSERVERS)o.state(last);if(foreground){NotificationManager n=getSystemService(NotificationManager.class);if(n!=null)n.notify(NOTICE,notification());}}
     private void shutdown(){if(!alive)return;endDialogue("음성비서 꺼짐");alive=false;foreground=false;BoardService.forget(boardObserver);main.removeCallbacksAndMessages(null);if(eleven!=null)eleven.close();if(tts!=null){tts.shutdown();tts=null;}io.shutdownNow();ServiceCompat.stopForeground(this,ServiceCompat.STOP_FOREGROUND_REMOVE);publish();}
     @Override public void onDestroy(){shutdown();if(instance==this)instance=null;super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}

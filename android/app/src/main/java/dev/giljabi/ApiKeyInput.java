@@ -21,9 +21,9 @@ final class ApiKeyInput {
         if(value.length()>=2){char a=value.charAt(0),b=value.charAt(value.length()-1);if(a==b&&(a=='\''||a=='"'||a=='`'))value=value.substring(1,value.length()-1);}
         boolean cleaned=!value.equals(raw);
         if(value.isEmpty())return new Parsed("",null,cleaned);
-        if(value.indexOf('*')>=0||value.indexOf('\u2026')>=0||value.contains("..."))return new Parsed("","가려지거나 생략된 키입니다. AI Studio의 복사 버튼으로 원본 키 전체를 복사하세요.",cleaned);
-        if(value.startsWith("GEMINI_API_KEY=")||value.startsWith("GOOGLE_API_KEY=")||value.startsWith("x-goog-api-key:"))return new Parsed("","설정 코드 전체가 붙여넣어졌습니다. API 키 값만 복사하세요.",cleaned);
-        if(value.length()<10||value.length()>1024)return new Parsed("","키 길이를 확인하세요. AI Studio에서 원본 키 전체를 복사하세요.",cleaned);
+        if(value.indexOf('*')>=0||value.indexOf('\u2026')>=0||value.contains("..."))return new Parsed("","가려지거나 생략된 키입니다. 키를 발급한 서비스의 복사 버튼으로 원본 키 전체를 복사하세요.",cleaned);
+        if(value.startsWith("GEMINI_API_KEY=")||value.startsWith("GOOGLE_API_KEY=")||value.startsWith("OPENAI_API_KEY=")||value.startsWith("x-goog-api-key:")||value.startsWith("Authorization:"))return new Parsed("","설정 코드 전체가 붙여넣어졌습니다. API 키 값만 복사하세요.",cleaned);
+        if(value.length()<10||value.length()>1024)return new Parsed("","키 길이를 확인하세요. 키를 발급한 서비스에서 원본 키 전체를 복사하세요.",cleaned);
         if(!GeminiClient.validKey(value)){
             for(int i=0;i<value.length();){int c=value.codePointAt(i);i+=Character.charCount(c);
                 if(c<33||c>126)

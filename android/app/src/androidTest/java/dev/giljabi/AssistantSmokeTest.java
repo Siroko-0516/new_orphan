@@ -19,6 +19,12 @@ public class AssistantSmokeTest {
     @Rule public GrantPermissionRule permissions=GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO,Manifest.permission.POST_NOTIFICATIONS,Manifest.permission.BLUETOOTH_CONNECT);
     private Context context(){return InstrumentationRegistry.getInstrumentation().getTargetContext();}
     private void main(Runnable action){InstrumentationRegistry.getInstrumentation().runOnMainSync(action);}
+    @Test public void communicationAudioPermissionIsGrantedAndRouteCanBeConfigured(){
+        assertEquals(android.content.pm.PackageManager.PERMISSION_GRANTED,context().checkSelfPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS));
+        android.media.AudioManager audio=context().getSystemService(android.media.AudioManager.class);int previous=audio.getMode();
+        try(ActivityScenario<MainActivity> activity=ActivityScenario.launch(MainActivity.class)){audio.setMode(android.media.AudioManager.MODE_IN_COMMUNICATION);long until=SystemClock.elapsedRealtime()+3000;while(audio.getMode()!=android.media.AudioManager.MODE_IN_COMMUNICATION&&SystemClock.elapsedRealtime()<until)SystemClock.sleep(50);assertEquals(android.media.AudioManager.MODE_IN_COMMUNICATION,audio.getMode());}
+        finally{audio.setMode(previous);}
+    }
     private static final class Probe implements AssistantInput.Listener {
         final CountDownLatch ready=new CountDownLatch(1),done=new CountDownLatch(1);
         volatile String failure,route;volatile byte[] wav;volatile boolean limit;

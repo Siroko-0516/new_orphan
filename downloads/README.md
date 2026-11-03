@@ -1,6 +1,18 @@
 # 길잡이 테스트 APK
 
-## 최신 · 버튼으로 녹음 시작·전송·답변 중단 · 0.9.2-full
+## 최신 · 현재 위치·전화·지도 연결 / GPT 추가 · 0.9.3-full
+
+**[giljabi-0.9.3-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/giljabi-0.9.3-full-debug.apk)** · [릴리스·검사 결과](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.3-full)
+
+- **“내 위치가 어디야”**를 휴대폰 위치 조회로 연결하고 실제 주소/좌표·정확도·확인 시각과 지도 링크를 표시합니다.
+- 연락처 전화는 확인 안내 후 **“네”**를 받은 경우에만 시스템 전화 API로 발신을 요청합니다. 권한·취소·만료와 한 번만 발신하는 흐름을 검사합니다.
+- 지도 검색 서버가 실패해도 실제 좌표의 지도 검색 링크를 준비합니다. 병원 정보와 거리를 만들어내지 않습니다.
+- **GPT 사진·보행 분석과 음성비서**를 추가합니다. 본인의 별도 OpenAI API 키가 필요하며 ChatGPT 구독과 API 결제는 별개입니다.
+- 로컬·Gemini·기존 음성·카메라·BLE와 버튼 녹음 방식은 유지합니다. **UNO 정식 v5는 그대로 사용합니다.**
+
+[위치·전화·지도·GPT 사용법](../android/PHONE_LOCATION_GPT.md) · [검증 기록](../android/PHONE_LOCATION_GPT_VALIDATION.json).
+
+## 이전 · 버튼으로 녹음 시작·전송·답변 중단 · 0.9.2-full
 
 **[giljabi-0.9.2-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.2-full/giljabi-0.9.2-full-debug.apk)** · [릴리스·검사 결과](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.2-full)
 

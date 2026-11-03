@@ -16,7 +16,11 @@ final class ApiKeyStore {
     private final String ALIAS,ENTRY,provider;
     private final SharedPreferences preferences;
     ApiKeyStore(Context context){this(context,false);}
-    ApiKeyStore(Context context,boolean eleven){ALIAS=eleven?"giljabi_eleven_aes_v1":"giljabi_gemini_aes_v1";ENTRY=eleven?"eleven_key_ciphertext":"gemini_key_ciphertext";provider=eleven?"ElevenLabs":"Gemini";preferences=context.getSharedPreferences("cloud-key",Context.MODE_PRIVATE);}
+    ApiKeyStore(Context context,boolean eleven){this(context,eleven?"eleven":"gemini");}
+    ApiKeyStore(Context context,String kind){
+        if(!Arrays.asList("gemini","eleven","openai").contains(kind))throw new IllegalArgumentException("Unknown key provider");
+        ALIAS="giljabi_"+kind+"_aes_v1";ENTRY=kind+"_key_ciphertext";provider=kind.equals("eleven")?"ElevenLabs":kind.equals("openai")?"OpenAI GPT":"Gemini";preferences=context.getSharedPreferences("cloud-key",Context.MODE_PRIVATE);
+    }
     boolean hasKey(){return preferences.contains(ENTRY);}
     void save(String value) throws IOException {
         try{if(!preferences.edit().putString(ENTRY,encrypt(value,key())).commit())throw new IOException("API 키 저장에 실패했습니다.");}

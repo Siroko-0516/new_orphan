@@ -36,6 +36,7 @@ final class NearbyPlaces {
         }catch(JSONException error){throw new IOException("지도 검색 응답을 읽지 못했습니다.",error);}
     }
     static double distance(double a,double b,double c,double d){double p=Math.toRadians(c-a),q=Math.toRadians(d-b),h=Math.sin(p/2)*Math.sin(p/2)+Math.cos(Math.toRadians(a))*Math.cos(Math.toRadians(c))*Math.sin(q/2)*Math.sin(q/2);return 6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));}
+    static String searchUrl(String category,double lat,double lon)throws IOException{query(category,lat,lon);return "https://www.google.com/maps/search/?api=1&query="+java.net.URLEncoder.encode(category+" near "+lat+","+lon,"UTF-8");}
     static String spoken(String category,List<Place> places){
         if(places.isEmpty())return "지도 데이터에서 이름이 있는 주변 "+category+" 검색 결과를 찾지 못했어요. 주변에 없다는 뜻은 아니에요. 앱에서 지도 검색을 열어 확인할 수 있어요.";
         StringBuilder b=new StringBuilder("주변 "+category+" 검색 결과예요. ");

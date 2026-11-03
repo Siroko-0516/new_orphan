@@ -102,7 +102,7 @@ final class GeminiClient {
             return answer+(finish.equals("MAX_TOKENS")?"\n(출력 길이 제한으로 답변이 끝났습니다.)":"");
         }catch(JSONException e){throw new IOException("Gemini 응답 형식을 읽지 못했습니다.",e);}
     }
-    static final class Request implements AutoCloseable {
+    static final class Request implements CloudRequest {
         private final HttpURLConnection connection;
         private final byte[] body;
         private final BooleanSupplier cancelled;
@@ -127,7 +127,7 @@ final class GeminiClient {
             connection.setRequestProperty("Content-Type","application/json; charset=utf-8");
             connection.setRequestProperty("x-goog-api-key",key);
         }
-        String execute() throws IOException {
+        public String execute() throws IOException {
             deadline=DEADLINES.schedule(()->{timedOut=true;close();},deadlineMs,TimeUnit.MILLISECONDS);
             try{
                 check();

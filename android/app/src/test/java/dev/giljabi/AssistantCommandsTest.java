@@ -13,4 +13,8 @@ public class AssistantCommandsTest {
  @Test public void dialControlCodesAreRejected(){assertEquals("",AssistantCommands.phone("*21*01012345678#"));assertEquals("",AssistantCommands.phone("01012345678,1"));assertEquals("",AssistantCommands.phone("119"));}
  @Test public void contactAliasesAndEmoji(){assertTrue(AssistantCommands.sameName("엄마❤️","어머니"));assertFalse(AssistantCommands.sameName("엄마회사","엄마"));}
  @Test public void outputIsNotAnActionInput(){assertTrue(AssistantCommands.speechText("**안녕하세요** https://example.com").startsWith("안녕하세요"));}
+ @Test public void currentLocationIsADeviceAction(){for(String text:new String[]{"내 위치가 어디야","현재 위치 알려줘","여기가 어딘지 알려줘","나 어디야?","내가 있는 곳 알려줘","현재 주소 확인해줘"})assertEquals(text,AssistantCommands.Kind.LOCATION,AssistantCommands.parse(text,false).kind);}
+ @Test public void nearbySearchTakesPriorityOverLocationWords(){assertEquals(AssistantCommands.Kind.NEARBY,AssistantCommands.parse("내 위치 주변에 병원 있냐",false).kind);assertEquals(AssistantCommands.Kind.NEARBY,AssistantCommands.parse("병원 있냐",false).kind);}
+ @Test public void locationNegationNeverQueriesGps(){assertEquals(AssistantCommands.Kind.CANCEL,AssistantCommands.parse("내 위치 조회하지마",false).kind);}
+ @Test public void callWithoutANameExplainsActualCapability(){assertEquals(AssistantCommands.Kind.CALL_HELP,AssistantCommands.parse("전화해줘",false).kind);}
 }
