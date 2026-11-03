@@ -25,7 +25,7 @@ import static org.junit.Assert.*;
 /** Real Android contacts, Telecom and dialer; strictly restricted to the AVD modem. */
 @RunWith(AndroidJUnit4.class)
 public class PhoneSystemSmokeTest {
-    private static final String NAME="길잡이 발신 검사",NUMBER="+12025550123"; // NANPA fictional 555-0123.
+    private static final String NAME="길잡이 발신 검사",NUMBER="15555215556"; // Local peer AVD on console port 5556.
     @Rule public GrantPermissionRule permissions=GrantPermissionRule.grant(Manifest.permission.CALL_PHONE,Manifest.permission.READ_CONTACTS);
     private final Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
     private final UiAutomation automation=InstrumentationRegistry.getInstrumentation().getUiAutomation();
@@ -77,7 +77,7 @@ public class PhoneSystemSmokeTest {
             SystemClock.sleep(1200);
             assertTrue("Cannot capture system phone screen",device.takeScreenshot(new File(folder,"phone-system-screen.png")));
             device.dumpWindowHierarchy(new File(folder,"phone-system-window.xml"));
-            JSONObject report=new JSONObject().put("android_api",Build.VERSION.SDK_INT).put("hardware",Build.HARDWARE).put("test_contact_lookup",true).put("production_phone_gateway",true).put("telecom_mocked",false).put("system_call_present",true).put("system_dialer_visible",true).put("dialer_package",dialer).put("fictional_test_number",NUMBER).put("real_mobile_network_used",false).put("real_recipient_connection_verified",false).put("voice_recognition_or_spoken_confirmation_tested_here",false);
+            JSONObject report=new JSONObject().put("android_api",Build.VERSION.SDK_INT).put("hardware",Build.HARDWARE).put("test_contact_lookup",true).put("production_phone_gateway",true).put("telecom_mocked",false).put("system_call_present",true).put("system_dialer_visible",true).put("dialer_package",dialer).put("virtual_peer_number",NUMBER).put("real_mobile_network_used",false).put("real_recipient_connection_verified",false).put("voice_recognition_or_spoken_confirmation_tested_here",false);
             try(FileOutputStream output=new FileOutputStream(new File(folder,"phone-system-check.json"))){output.write((report.toString(2)+"\n").getBytes(StandardCharsets.UTF_8));}
         }finally{
             endCall(telecom);

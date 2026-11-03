@@ -34,11 +34,12 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          avd-name: giljabi-phone
           arch: x86_64
           target: google_apis
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 1536
           working-directory: android
           script: bash scripts/phone_system_smoke.sh
       - name: Summarize the actual system call test
@@ -63,6 +64,9 @@ jobs:
               result['test_source']=os.environ['GITHUB_SHA']
               result['production_matches_release']='android-v0.9.3-full'
               result['test_build']='x86_64 lite; same Java app source, no bundled models'
+              peer=Path('android/phone-system-validation/peer-gsm-check.txt')
+              result['virtual_peer_received_call']=peer.exists() and '15555215554' in peer.read_text()
+              if not result['virtual_peer_received_call']: raise SystemExit('Peer emulator did not receive the outgoing call')
               report.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
           print(json.dumps(totals))
           if totals!={'tests':1,'failures':0,'errors':0,'skipped':0}: raise SystemExit('Phone system test did not pass exactly once')
