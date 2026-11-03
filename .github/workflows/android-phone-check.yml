@@ -39,7 +39,7 @@ jobs:
           target: google_apis
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 1536
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -read-only -no-metrics -gpu swiftshader_indirect -memory 2560
           working-directory: android
           script: bash scripts/phone_system_smoke.sh
       - name: Summarize the actual system call test

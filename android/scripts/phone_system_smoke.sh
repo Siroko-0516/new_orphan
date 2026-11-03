@@ -10,7 +10,7 @@ cleanup() {
   adb -s emulator-5556 emu kill || true
 }
 trap cleanup EXIT
-"$ANDROID_HOME/emulator/emulator" -avd giljabi-phone -port 5556 -read-only -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 1536 > phone-system-validation/peer-emulator.log 2>&1 &
+"$ANDROID_HOME/emulator/emulator" -avd giljabi-phone -port 5556 -read-only -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -memory 2560 > phone-system-validation/peer-emulator.log 2>&1 &
 peer_pid=$!
 peer_ready=false
 for attempt in $(seq 1 150); do
