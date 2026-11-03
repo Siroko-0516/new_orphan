@@ -21,6 +21,7 @@ void buttonScenario(uint8_t released){
     advance(1500);assert(hm10.output=="ASSIST\n");
     changeButton(released);assert(hm10.output=="ASSIST\n");
     changeButton(pressed);assert(hm10.output=="ASSIST\nASSIST\n");
+    assert(warningServo.angles.empty()&&!moving); // A button calls the assistant, not the motor.
 }
 void largerGestureAndResponsiveButton(uint8_t released){
     boot(released);hm10.feed("OBSTACLE\r\n");loop();unsigned long start=fakeMillis;
@@ -44,9 +45,35 @@ void commandScenario(){
     hm10.feed(std::string(80,'X')+"TEST\n");loop();assert(!moving);
     hm10.feed("TE");loop();assert(!moving);hm10.feed("ST\n");loop();assert(moving);
 }
+void moduleNotificationScenario(){
+    // Actual reported UART bytes decode to OK+LOST, with no newline.
+    const std::string stream="OK+LOSTOK+CONNTEST\n";
+    for(size_t split=0;split<=stream.size();++split){
+        boot(HIGH);
+        hm10.feed(stream.substr(0,split));loop();advance(100);
+        hm10.feed(stream.substr(split));loop();
+        assert(moving&&pinValues[LED_BUILTIN]==HIGH);
+        assert(hm10.output.empty());
+    }
+    for(const std::string notification:{"OK+LOST","OK+CONN","OK+CONNA","OK+CONNE","OK+CONNF","OK+LOST\r\nOK+CONN\r\n"}){
+        boot(HIGH);hm10.feed(notification);loop();
+        assert(!moving&&warningServo.angles.empty()&&hm10.output.empty());
+        hm10.feed("OBSTACLE\n");loop();assert(moving);
+    }
+}
+void staleAndInvalidFrameScenario(){
+    boot(HIGH);hm10.feed("TE");loop();advance(500);
+    hm10.feed("ST\n");loop();assert(!moving);
+    hm10.feed("TEST\n");loop();assert(moving);
+    for(const std::string &invalid:{std::string("TEST\0JUNK\n",10),std::string("XOK+CONNTEST\n"),std::string("OK+LOSTTESTX\n"),std::string("TEOK+LOSTST\n")}){
+        boot(HIGH);hm10.feed(invalid);loop();assert(!moving);
+        hm10.feed("TEST\n");loop();assert(moving);
+    }
+}
 int main(){
     buttonScenario(HIGH);buttonScenario(LOW);
     largerGestureAndResponsiveButton(HIGH);largerGestureAndResponsiveButton(LOW);
     commandScenario();
-    std::cout<<"Passed firmware scenarios: both button polarities, debounce, hold/release, bounded triple sweep, live button during motion, UART framing.\n";
+    moduleNotificationScenario();staleAndInvalidFrameScenario();
+    std::cout<<"Passed firmware scenarios: assistant-only button (both polarities), debounce, hold/release, bounded triple sweep, live button during motion, fragmented UART, no-newline HM-10 notifications, stale/binary/invalid frames.\n";
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // UNO R3 + HM-10 UART + SG90 + momentary button. Read README before wiring.
-// v4: three fast 45..135 degree sweeps, then return to the center.
+// v5: ignore HM-10 link notifications; button sends ASSIST, alerts move servo.
 #include <Arduino.h>
 #include <Servo.h>
 #include <string.h>
@@ -20,6 +20,9 @@ Servo warningServo;
 char line[32];
 uint8_t used = 0;
 bool discardLine = false;
+bool connectionSuffix = false;
+unsigned long lastRxAt = 0;
+const unsigned long RX_IDLE_MS = 500;
 bool moving = false;
 uint8_t phase = 0;
 unsigned long phaseAt = 0;
@@ -41,6 +44,13 @@ unsigned long buttonChangedAt = 0;
 bool assistantPending = false;
 unsigned long lastAssistAt = 0;
 
+void resetRxLine() {
+  used = 0;
+  line[0] = '\0';
+  discardLine = false;
+  connectionSuffix = false;
+}
+
 void startWarning() {
   if (moving) return; // Coalesce alerts; no queued/unbounded motor movement.
   warningServo.attach(SERVO_PIN);
@@ -61,8 +71,39 @@ void updateWarning() {
     digitalWrite(SERVO_PIN, LOW);
     digitalWrite(LED_BUILTIN, LOW);
     moving = false;
+    resetRxLine();
+  }
+}
+
+void receiveByte(uint8_t value) {
+  // HM-10 may append A/E/F to OK+CONN for a connection attempt/error/failure.
+  // A real app command starts with T or O, so its first byte is not consumed.
+  if (connectionSuffix) {
+    connectionSuffix = false;
+    if (value == 'A' || value == 'E' || value == 'F') return;
+  }
+  if (value == '\r') return;
+  if (value == '\n') {
+    if (!discardLine && (strcmp(line, "TEST") == 0 || strcmp(line, "OBSTACLE") == 0)) {
+      startWarning();
+    }
+    resetRxLine();
+    return;
+  }
+  if (discardLine) return;
+  if (value < 32 || value > 126 || used >= sizeof(line) - 1) {
     used = 0;
-    discardLine = false;
+    discardLine = true;
+    return;
+  }
+  line[used++] = static_cast<char>(value);
+  line[used] = '\0';
+  // These local module notifications have no newline. Do not leave one
+  // in front of the next phone command, e.g. OK+CONNTEST\n.
+  if (strcmp(line, "OK+LOST") == 0) resetRxLine();
+  else if (strcmp(line, "OK+CONN") == 0) {
+    resetRxLine();
+    connectionSuffix = true;
   }
 }
 
@@ -80,6 +121,8 @@ void setup() {
   rawButton = stableButton = releasedLevel;
   buttonChangedAt = millis();
   lastAssistAt = millis() - 1000UL;
+  resetRxLine();
+  lastRxAt = millis();
   // This UART carries the BLE protocol. Do not print debug messages here.
 }
 
@@ -90,22 +133,12 @@ void loop() {
     stableButton = sample;
     if (stableButton != releasedLevel) assistantPending = true;
   }
+  // Expire an incomplete frame rather than join stale bytes to a fresh command.
+  if (millis() - lastRxAt >= RX_IDLE_MS) resetRxLine();
   // Drain UART even during a gesture; startWarning() coalesces extra alerts.
   while (hm10.available()) {
-    char c = static_cast<char>(hm10.read());
-    if (c == '\r') continue;
-    if (c == '\n') {
-      if (!discardLine) {
-        line[used] = '\0';
-        if (strcmp(line, "TEST") == 0 || strcmp(line, "OBSTACLE") == 0) {
-          startWarning();
-        }
-      }
-      used = 0; discardLine = false;
-    } else if (!discardLine) {
-      if (used < sizeof(line) - 1) line[used++] = c;
-      else { used = 0; discardLine = true; }
-    }
+    lastRxAt = millis();
+    receiveByte(static_cast<uint8_t>(hm10.read()));
   }
   updateWarning();
   // Hardware UART keeps the button responsive even during the longer gesture.

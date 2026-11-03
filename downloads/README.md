@@ -10,7 +10,7 @@
 - 단위 검사 **258개**, lint 오류 0, Android 15 서비스 수명·카메라·VAD 및 기존 네이티브 검사 통과. 공개 APK의 체크섬·v2 서명·16KB 정렬·내장 모델 해시를 다시 확인했습니다. 실물 무선 연결·서보 동작은 별도 확인이 필요합니다.
 - 파일은 **1,828,257,709바이트(약 1.83GB)**입니다. **공개 0.9.0과 서명이 달라 삭제 후 설치해야 하며 키·설정·준비한 모델이 초기화됩니다.**
 
-[연결 사용법·검사 범위](../android/BLE_CONNECTION.md) · [검증 데이터](../android/BLE_CONNECTION_VALIDATION.json) · [UNO v4 · 큰 왕복 동작](https://raw.githubusercontent.com/Siroko-0516/new_orphan/main/downloads/Giljabi-UNO-HM10-SG90-v4.zip) · [SG90 D2 단독 시험](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.1-full/Giljabi-SG90-D2-Test-v1.zip).
+[연결 사용법·검사 범위](../android/BLE_CONNECTION.md) · [검증 데이터](../android/BLE_CONNECTION_VALIDATION.json) · [UNO v5 · 버튼 음성비서 / 연결 알림 처리](https://raw.githubusercontent.com/Siroko-0516/new_orphan/main/downloads/Giljabi-UNO-HM10-SG90-v5.zip) · [SG90 D2 단독 시험](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.1-full/Giljabi-SG90-D2-Test-v1.zip).
 
 SHA-256: `e4613a7c880dd852fef613c51cea5616c86ff746ca15aec5cda2efd3cf24567d`.
 

@@ -11,6 +11,8 @@ on:
       - 'downloads/Giljabi-UNO-HM10-SG90-v4-UART115200-test.zip.sha256'
       - 'downloads/Giljabi-UNO-UART-Diagnostic-v1.zip'
       - 'downloads/Giljabi-UNO-UART-Diagnostic-v1.zip.sha256'
+      - 'downloads/Giljabi-UNO-HM10-SG90-v5.zip'
+      - 'downloads/Giljabi-UNO-HM10-SG90-v5.zip.sha256'
   workflow_dispatch:
 permissions:
   contents: read
@@ -45,7 +47,9 @@ jobs:
           import os,zipfile,hashlib
           p=Path('downloads/Giljabi-UNO-HM10-SG90-v4-UART115200-test.zip')
           assert hashlib.sha256(p.read_bytes()).hexdigest()==Path(str(p)+'.sha256').read_text().split()[0]
-          source=Path('arduino/hm10_sg90_button/hm10_sg90_button.ino').read_text()
+          # This historical diagnostic is based on the immutable v4 download.
+          with zipfile.ZipFile('downloads/Giljabi-UNO-HM10-SG90-v4.zip') as base:
+              source=base.read('hm10_sg90_button/hm10_sg90_button.ino').decode()
           assert source.count('hm10.begin(9600);')==1
           with zipfile.ZipFile(p) as z:
               assert set(z.namelist())=={'hm10_115200_test/hm10_115200_test.ino','hm10_115200_test/README.md'}
@@ -68,3 +72,18 @@ jobs:
               z.extractall(Path(os.environ['RUNNER_TEMP'])/'receive-diagnostic')
           PY
           arduino-cli compile --fqbn arduino:avr:uno "$RUNNER_TEMP/receive-diagnostic/hm10_uart_diagnostic"
+      - name: Verify and compile the exact v5 assistant button download
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, zipfile, hashlib
+          p = Path('downloads/Giljabi-UNO-HM10-SG90-v5.zip')
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == Path(str(p)+'.sha256').read_text().split()[0]
+          base = Path('arduino/hm10_sg90_button')
+          with zipfile.ZipFile(p) as z:
+              assert set(z.namelist()) == {'hm10_sg90_button/hm10_sg90_button.ino', 'hm10_sg90_button/README.md'}
+              for name in ('hm10_sg90_button.ino', 'README.md'):
+                  assert z.read('hm10_sg90_button/'+name) == (base/name).read_bytes()
+              z.extractall(Path(os.environ['RUNNER_TEMP'])/'uno-v5')
+          PY
+          arduino-cli compile --fqbn arduino:avr:uno "$RUNNER_TEMP/uno-v5/hm10_sg90_button"
