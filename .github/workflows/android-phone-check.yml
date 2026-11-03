@@ -42,12 +42,29 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -read-only -no-metrics -gpu swiftshader_indirect -memory 2560
           working-directory: android
           script: bash scripts/phone_system_smoke.sh
+      - name: Export the successful system test before report formatting
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/phone-system-validation/phone-system-check.json android/phone-system-validation/phone-system-raw-check.json
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+          root=Path('android/app/build/outputs/androidTest-results')
+          with zipfile.ZipFile('android/phone-system-validation/phone-system-instrumentation.zip','w',zipfile.ZIP_DEFLATED) as output:
+              for file in root.rglob('TEST-*.xml'): output.write(file,file.relative_to(root))
+          PY
+          gh release upload android-v0.9.3-full android/phone-system-validation/phone-system-raw-check.json android/phone-system-validation/phone-system-screen.png android/phone-system-validation/phone-system-instrumentation.zip --clobber
       - name: Summarize the actual system call test
         if: always()
         run: |
           python3 - <<'PY'
-          import json,os,re,xml.etree.ElementTree as E
+          import json,os,re,sys,traceback,xml.etree.ElementTree as E
           from pathlib import Path
+          def exception(kind,error,trace):
+              message=''.join(traceback.format_exception(kind,error,trace))[-3500:]
+              print('::error title=Phone evidence summary::'+message.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+          sys.excepthook=exception
           totals={k:0 for k in ['tests','failures','errors','skipped']}
           for file in Path('android/app/build/outputs/androidTest-results').rglob('TEST-*.xml'):
               root=E.parse(file).getroot()
