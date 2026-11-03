@@ -74,7 +74,7 @@ public class PhoneSystemSmokeTest {
             while(!systemHasCall(telecom)&&SystemClock.elapsedRealtime()<deadline)SystemClock.sleep(100);
             assertTrue("Android Telecom never registered the outgoing call; UI="+device.getCurrentPackageName(),systemHasCall(telecom));
             assertTrue("System dialer did not open; expected="+dialer+", actual="+device.getCurrentPackageName(),device.wait(Until.hasObject(By.pkg(dialer)),15000));
-            SystemClock.sleep(1200);
+            SystemClock.sleep(5000); // Allow the host to observe ringing on the peer AVD.
             assertTrue("Cannot capture system phone screen",device.takeScreenshot(new File(folder,"phone-system-screen.png")));
             device.dumpWindowHierarchy(new File(folder,"phone-system-window.xml"));
             JSONObject report=new JSONObject().put("android_api",Build.VERSION.SDK_INT).put("hardware",Build.HARDWARE).put("test_contact_lookup",true).put("production_phone_gateway",true).put("telecom_mocked",false).put("system_call_present",true).put("system_dialer_visible",true).put("dialer_package",dialer).put("virtual_peer_number",NUMBER).put("real_mobile_network_used",false).put("real_recipient_connection_verified",false).put("voice_recognition_or_spoken_confirmation_tested_here",false);

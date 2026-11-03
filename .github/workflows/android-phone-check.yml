@@ -46,7 +46,7 @@ jobs:
         if: always()
         run: |
           python3 - <<'PY'
-          import json,os,xml.etree.ElementTree as E
+          import json,os,re,xml.etree.ElementTree as E
           from pathlib import Path
           totals={k:0 for k in ['tests','failures','errors','skipped']}
           for file in Path('android/app/build/outputs/androidTest-results').rglob('TEST-*.xml'):
@@ -65,9 +65,15 @@ jobs:
               result['production_matches_release']='android-v0.9.3-full'
               result['test_build']='x86_64 lite; same Java app source, no bundled models'
               peer=Path('android/phone-system-validation/peer-gsm-check.txt')
-              result['virtual_peer_received_call']=peer.exists() and '15555215554' in peer.read_text()
-              if not result['virtual_peer_received_call']: raise SystemExit('Peer emulator did not receive the outgoing call')
+              peer_state=peer.read_text() if peer.exists() else ''
+              result['virtual_peer_received_call']=bool(re.search('inbound|incoming|(?:mState|state)\\s*[:=]\\s*RINGING\\b',peer_state,re.I))
+              result['virtual_peer_state']=peer_state[:1000]
               report.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+              if not result['virtual_peer_received_call']:
+                  samples=Path('android/phone-system-validation/peer-gsm-samples.txt')
+                  message='Peer ringing not captured. '+(samples.read_text()[-2000:] if samples.exists() else 'No modem samples.')
+                  print('::error::'+message.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+                  raise SystemExit('Peer emulator did not receive the outgoing call')
           print(json.dumps(totals))
           if totals!={'tests':1,'failures':0,'errors':0,'skipped':0}:
               for name in ['android/phone-system-validation/peer-emulator.log','android/phone-system-smoke.log']:

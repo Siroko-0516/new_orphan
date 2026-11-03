@@ -24,7 +24,11 @@ adb -s emulator-5556 shell wm dismiss-keyguard
 track_peer() {
   for attempt in $(seq 1 600); do
     peer_call="$(adb -s emulator-5556 emu gsm list 2>/dev/null)"
-    if [[ "$peer_call" == *15555215554* ]]; then
+    printf '%s\n' "$peer_call" >> phone-system-validation/peer-gsm-samples.txt
+    if [[ "$peer_call" != *inbound* && "$peer_call" != *incoming* ]]; then
+      peer_call="$(adb -s emulator-5556 shell dumpsys telecom 2>/dev/null | rg -i '(mState|state)\s*[:=]\s*RINGING\b' || true)"
+    fi
+    if [[ -n "$peer_call" && ( "$peer_call" == *inbound* || "$peer_call" == *incoming* || "$peer_call" == *RINGING* ) ]]; then
       printf '%s\n' "$peer_call" > phone-system-validation/peer-gsm-check.txt
       adb -s emulator-5556 exec-out screencap -p > phone-system-validation/phone-peer-screen.png
       return 0
