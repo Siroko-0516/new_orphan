@@ -1,0 +1,27 @@
+{
+  "version": "0.9.2-full",
+  "version_code": 18,
+  "local_unit_tests": {
+    "tests": 263,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "local_lint_errors": 0,
+  "android_test_apk_compiled": true,
+  "recording": {
+    "control": "button starts; second button stops and submits; button during answer cancels and starts fresh",
+    "automatic_speech_interruption": false,
+    "automatic_silence_submission": false,
+    "maximum_seconds": 60,
+    "limit_requires_button_to_submit": true,
+    "microphone_open_during_answers": false
+  },
+  "firmware": "UNO v5 unchanged; ASSIST newline on physical button",
+  "ci_android15_and_full_apk": "pending release build",
+  "not_verified": [
+    "physical HM-10 and user wiring",
+    "physical wireless earbud input/output route",
+    "real phone calls and GPS service results"
+  ]
+}

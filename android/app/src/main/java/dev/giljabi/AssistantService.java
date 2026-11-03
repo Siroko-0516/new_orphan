@@ -22,16 +22,16 @@ import java.util.function.*;
 
 /** Explicitly armed microphone; the separate BoardService owns BLE. */
 @SuppressLint("MissingPermission") // Every protected operation is checked before use; FGS starts from visible Activity.
-public final class AssistantService extends Service {
+public class AssistantService extends Service {
     private static final String START="dev.giljabi.ASSISTANT_START",STOP="dev.giljabi.ASSISTANT_STOP",TRIGGER="dev.giljabi.ASSISTANT_TRIGGER",ASK="dev.giljabi.ASSISTANT_ASK",CHANNEL="giljabi-assistant";
     private static final int NOTICE=61;
     interface Observer {void state(Snapshot snapshot);}
     static final class Snapshot {
-        final boolean enabled,ready,busy,mapRequested;final String address,state,heard,answer,bleStatus,inputRoute;final List<NearbyPlaces.Place> places;
-        Snapshot(boolean e,boolean r,boolean b,String address,String state,String heard,String answer,String ble,String route,List<NearbyPlaces.Place> places,boolean map){enabled=e;ready=r;busy=b;this.address=address;this.state=state;this.heard=heard;this.answer=answer;bleStatus=ble;inputRoute=route;this.places=Collections.unmodifiableList(new ArrayList<>(places));mapRequested=map;}
+        final boolean enabled,ready,busy,mapRequested,buttonEnabled;final String address,state,heard,answer,bleStatus,inputRoute,buttonLabel;final List<NearbyPlaces.Place> places;
+        Snapshot(boolean e,boolean r,boolean b,String address,String state,String heard,String answer,String ble,String route,List<NearbyPlaces.Place> places,boolean map,String label,boolean canPress){enabled=e;ready=r;busy=b;this.address=address;this.state=state;this.heard=heard;this.answer=answer;bleStatus=ble;inputRoute=route;this.places=Collections.unmodifiableList(new ArrayList<>(places));mapRequested=map;buttonLabel=label;buttonEnabled=canPress;}
     }
     private static volatile AssistantService instance;
-    private static volatile Snapshot last=new Snapshot(false,false,false,"","음성비서 꺼짐","","","BLE 미연결","",Collections.emptyList(),false);
+    private static volatile Snapshot last=new Snapshot(false,false,false,"","음성비서 꺼짐","","","BLE 미연결","",Collections.emptyList(),false,"버튼 누르고 말하기",true);
     private static final CopyOnWriteArrayList<Observer> OBSERVERS=new CopyOnWriteArrayList<>();
     static Snapshot snapshot(){return last;}
     static boolean active(){return last.enabled;}
@@ -54,14 +54,17 @@ public final class AssistantService extends Service {
 
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor(r->new Thread(r,"assistant-request"));
-    private volatile long epoch;private long inputSegment=-1,outputEpoch,lastButton=-10000;
+    private volatile long epoch;private long outputEpoch,lastButton=-10000;
     private volatile boolean alive=true,dialogue,speaking,waiting;private long microphoneEpoch;
+    private final AssistantButtonState turns=new AssistantButtonState();
+    private byte[] recordedWav;
     private String address="";
     private final BoardService.Observer boardObserver=s->{address=s.address;bleStatus=s.status;publish();};
     private String state="음성비서 준비 중",heard="",answer="",bleStatus="BLE 미연결",inputRoute="";
-    private AssistantMic microphone;private AssistantLocation location;private volatile GeminiClient.Request request;private volatile PlacesClient.Request placesRequest;private Future<?> task;
+    private AssistantInput microphone;private AssistantLocation location;private volatile GeminiClient.Request request;private volatile PlacesClient.Request placesRequest;private Future<?> task;
     private ElevenSpeech eleven;private TextToSpeech tts;private boolean ttsReady,foreground,focusHeld;
     private AudioManager audio;private AudioFocusRequest focus;private PowerManager.WakeLock wake;
+    private boolean communicationRoute,scoRoute;private int previousAudioMode;
     private Consumer<String> outputStarted;private String pendingNative;
     private List<NearbyPlaces.Place> places=Collections.emptyList();private String mapUrl="";private boolean mapRequested;
     private final ArrayDeque<String> history=new ArrayDeque<>();
@@ -95,46 +98,77 @@ public final class AssistantService extends Service {
             if(Build.VERSION.SDK_INT>=30)types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
             if(Build.VERSION.SDK_INT>=29&&(permission(Manifest.permission.ACCESS_FINE_LOCATION)||permission(Manifest.permission.ACCESS_COARSE_LOCATION)))types|=ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
             ServiceCompat.startForeground(this,NOTICE,notification(),types);foreground=true;
-            state="음성비서 대기 · 보드 버튼이나 앱의 말하기를 누르세요.";publish();
+            if(!dialogue)state="음성비서 대기 · 버튼을 눌러 녹음을 시작하세요.";publish();
         }catch(RuntimeException error){state="음성비서 시작 실패 · 앱을 열고 마이크·주변 기기 권한을 확인해주세요.";shutdown();stopSelf();}
         return START_NOT_STICKY;
     }
     private boolean permission(String name){return ContextCompat.checkSelfPermission(this,name)==PackageManager.PERMISSION_GRANTED;}
     private boolean prepareDialogue(){
         if(!alive||!permission(Manifest.permission.RECORD_AUDIO)){state="마이크 권한을 허용한 뒤 다시 시작해주세요.";publish();return false;}
-        if(!new ApiKeyStore(this).hasKey()){state="Gemini API 키를 설정해주세요.";publish();return false;}
+        if(!hasAssistantKey()){state="Gemini API 키를 설정해주세요.";publish();return false;}
         if(!focusHeld){focusHeld=audio.requestAudioFocus(focus)==AudioManager.AUDIOFOCUS_REQUEST_GRANTED;if(!focusHeld){state="통화 또는 다른 앱의 오디오 사용이 끝난 뒤 다시 눌러주세요.";publish();return false;}}
+        try{beginCommunicationRoute();}catch(RuntimeException error){state="이어폰·휴대폰 오디오 연결을 확인해주세요.";publish();return false;}
         dialogue=true;if(wake!=null)wake.acquire(240000);MonitorService.pauseForAssistant();return true;
+    }
+    boolean hasAssistantKey(){return new ApiKeyStore(this).hasKey();}
+    private void beginCommunicationRoute(){
+        if(communicationRoute)return;
+        previousAudioMode=audio.getMode();audio.setMode(AudioManager.MODE_IN_COMMUNICATION);communicationRoute=true;
+        if(Build.VERSION.SDK_INT>=31){
+            for(AudioDeviceInfo d:audio.getAvailableCommunicationDevices()){
+                int t=d.getType();if(t==AudioDeviceInfo.TYPE_BLUETOOTH_SCO||t==AudioDeviceInfo.TYPE_WIRED_HEADSET||t==AudioDeviceInfo.TYPE_USB_HEADSET||t==AudioDeviceInfo.TYPE_BLE_HEADSET){audio.setCommunicationDevice(d);break;}
+            }
+        }else if(audio.isBluetoothScoAvailableOffCall()){audio.startBluetoothSco();audio.setBluetoothScoOn(true);scoRoute=true;}
+    }
+    private void releaseDialogueAudio(){
+        if(communicationRoute){
+            communicationRoute=false;
+            try{if(Build.VERSION.SDK_INT>=31)audio.clearCommunicationDevice();else if(scoRoute){audio.setBluetoothScoOn(false);audio.stopBluetoothSco();}if(audio.getMode()==AudioManager.MODE_IN_COMMUNICATION)audio.setMode(previousAudioMode);}catch(RuntimeException ignored){}
+            scoRoute=false;
+        }
+        if(wake!=null&&wake.isHeld())wake.release();
+        if(focusHeld){audio.abandonAudioFocusRequest(focus);focusHeld=false;}
     }
     private void button(boolean hardware){
         long now=SystemClock.elapsedRealtime();if(hardware&&now-lastButton<600)return;lastButton=now;
-        if(!prepareDialogue())return;
-        cancelRequests();cancelOutput();inputSegment=-1;
-        if(microphone!=null){microphone.rearm();state="듣고 있어요. 말씀해주세요.";publish();return;}
-        state="마이크 준비 중 · 시작음 뒤에 말씀해주세요.";publish();
-        try{ToneGenerator tone=new ToneGenerator(AudioManager.STREAM_MUSIC,35);tone.startTone(ToneGenerator.TONE_PROP_BEEP,100);main.postDelayed(tone::release,180);}catch(RuntimeException ignored){}
-        final long starting=epoch;
-        main.postDelayed(()->{if(!alive||!dialogue||epoch!=starting)return;startMic();},180);
+        AssistantButtonState.Action action=turns.press();
+        if(action==AssistantButtonState.Action.IGNORE)return;
+        if(action==AssistantButtonState.Action.FINISH){state="녹음을 마치고 전송할 준비 중이에요.";publish();if(microphone!=null)microphone.finish();return;}
+        if(action==AssistantButtonState.Action.SEND){byte[] wav=recordedWav;recordedWav=null;if(wav!=null)submitAudio(wav);else endDialogue("녹음이 없어요. 다시 버튼을 눌러주세요.");return;}
+        cancelRequests();cancelOutput();closeInput();
+        if(!prepareDialogue()){endDialogue(state);return;}
+        state="마이크 준비 중 · 시작음 뒤에 말하고, 끝나면 버튼을 다시 누르세요.";publish();
+        startMic();
     }
+    AssistantInput createMicrophone(AssistantInput.Listener listener){return new AssistantMic(this,listener);}
     private void startMic(){
         if(microphone!=null)return;
         final long micId=++microphoneEpoch;
-        AssistantMic mic=new AssistantMic(this,()->speaking,()->waiting,()->getSharedPreferences("ai-settings",MODE_PRIVATE).getBoolean("assistant_barge_in",true),new AssistantMic.Listener(){
-            @Override public void voice(long id){if(!alive||!dialogue||microphoneEpoch!=micId)return;cancelRequests();cancelOutput();inputSegment=id;state="듣고 있어요.";publish();}
-            @Override public void utterance(long id,byte[] wav){if(!alive||!dialogue||microphoneEpoch!=micId||id!=inputSegment)return;submitAudio(wav);}
-            @Override public void idle(){if(dialogue&&microphoneEpoch==micId)endDialogue("잠시 말씀이 없어 듣기를 마쳤어요. 다시 버튼을 누르면 시작해요.");}
+        AssistantInput mic=createMicrophone(new AssistantInput.Listener(){
+            @Override public void ready(String route){
+                if(!alive||!dialogue||microphoneEpoch!=micId||turns.phase()!=AssistantButtonState.Phase.RECORDING)return;
+                inputRoute=route+" · 버튼으로 녹음 시작 / 전송";state="녹음 중 · 말씀을 마치면 버튼을 다시 눌러 전송하세요.";publish();
+                try{ToneGenerator tone=new ToneGenerator(AudioManager.STREAM_VOICE_CALL,35);tone.startTone(ToneGenerator.TONE_PROP_BEEP,100);main.postDelayed(tone::release,180);}catch(RuntimeException ignored){}
+            }
+            @Override public void finished(byte[] wav,boolean reachedLimit){
+                if(!alive||!dialogue||microphoneEpoch!=micId)return;
+                microphone=null;inputRoute="";
+                if(turns.recorded())submitAudio(wav);
+                else if(turns.phase()==AssistantButtonState.Phase.READY){recordedWav=wav;state="60초 녹음이 끝났어요. 버튼을 누르면 전송해요.";publish();}
+            }
             @Override public void error(String message){if(dialogue&&microphoneEpoch==micId)endDialogue(message);}
-            @Override public void route(String route,boolean barge){if(!dialogue||microphoneEpoch!=micId)return;inputRoute=route+(barge?" · 말로 끼어들기 켜짐":" · 답변 중에는 버튼으로 끊기");state="듣고 있어요. 말씀해주세요.";publish();}
         });microphone=mic;mic.start();
     }
+    private void closeInput(){microphoneEpoch++;AssistantInput old=microphone;microphone=null;recordedWav=null;inputRoute="";if(old!=null)old.close();}
     private void typed(String value){
-        if(!prepareDialogue())return;cancelRequests();cancelOutput();
-        startMic();heard=value;route(value,null,epoch);publish();
+        cancelRequests();cancelOutput();closeInput();
+        if(!prepareDialogue()){endDialogue(state);return;}
+        turns.waiting();heard=value;route(value,null,epoch);publish();
     }
     private String history(){StringBuilder b=new StringBuilder();for(String turn:history)b.append(turn).append('\n');return b.toString();}
     private void remember(String user,String reply){history.addLast("사용자: "+user+"\n답변: "+reply);while(history.size()>4)history.removeFirst();}
-    private void submitAudio(byte[] wav){
-        final long turn=epoch;waiting=true;state="말씀을 확인하고 있어요.";publish();
+    void submitAudio(byte[] wav){
+        turns.waiting();final long turn=epoch;waiting=true;state="녹음을 전송했어요. Gemini가 말씀을 확인하고 있어요.";publish();
         final String previous=history();
         task=io.submit(()->{
             try(CloudNetwork.Lease internet=CloudNetwork.connect(this,()->!valid(turn))){
@@ -159,7 +193,7 @@ public final class AssistantService extends Service {
     private void findContact(String target,long turn){
         if(!permission(Manifest.permission.CALL_PHONE)){speak("앱의 연락처·전화 권한 버튼에서 통화 권한을 허용해주세요.",null);return;}
         waiting=true;state="휴대폰 연락처를 확인하고 있어요.";publish();
-        task=io.submit(()->{try{AssistantContacts.Contact contact=AssistantContacts.find(this,target);main.post(()->{if(!valid(turn))return;PendingCall call=new PendingCall(contact);pendingCall=call;speak(contact.name+"에게 전화할까요? 맞으면 네, 아니면 취소라고 말씀해주세요.",message->{if(pendingCall==call)call.guard.playbackStarted();});});}catch(Exception error){fail(turn,error);}});
+        task=io.submit(()->{try{AssistantContacts.Contact contact=AssistantContacts.find(this,target);main.post(()->{if(!valid(turn))return;PendingCall call=new PendingCall(contact);pendingCall=call;speak(contact.name+"에게 전화할까요? 버튼을 눌러 네 또는 취소라고 말한 뒤 다시 눌러주세요.",message->{if(pendingCall==call)call.guard.playbackStarted();});});}catch(Exception error){fail(turn,error);}});
     }
     private void confirmCall(){
         PendingCall call=pendingCall;pendingCall=null;
@@ -183,12 +217,14 @@ public final class AssistantService extends Service {
     private void fail(long turn,Exception failure){main.post(()->{if(valid(turn))speak(failure.getMessage()==null?"요청을 처리하지 못했어요. 다시 말씀해주세요.":failure.getMessage(),null);});}
     private void cancelRequests(){epoch++;waiting=false;if(task!=null)task.cancel(true);task=null;GeminiClient.Request r=request;PlacesClient.Request p=placesRequest;request=null;placesRequest=null;if(r!=null)new Thread(r::close,"assistant-cancel").start();if(p!=null)new Thread(p::close,"places-cancel").start();if(location!=null){location.close();location=null;}}
     private void cancelOutput(){outputEpoch++;speaking=false;pendingNative=null;outputStarted=null;if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();}
-    private void speak(String raw,Consumer<String> started){
+    void speak(String raw,Consumer<String> started){
         cancelOutput();if(!alive||!dialogue)return;
         waiting=false;answer=AssistantCommands.speechText(raw);if(answer.isEmpty())answer="다시 말씀해주세요.";
         if(!answer.matches("(?s).*[가-힣].*"))answer="한국어 답변을 준비하지 못했어요. 다시 말씀해주세요.";
-        speaking=true;outputStarted=started;state="답변 중 · 다시 말하거나 버튼을 누르면 멈춰요.";publish();
-        final long output=outputEpoch;
+        turns.speaking();speaking=true;outputStarted=started;state="답변 중 · 버튼을 누르면 멈추고 새 녹음을 시작해요.";publish();
+        playAnswer(outputEpoch);
+    }
+    void playAnswer(long output){
         if(new ApiKeyStore(this,true).hasKey())eleven.speak(answer,()->alive&&dialogue&&speaking&&outputEpoch==output,7000);else nativeSpeak(answer);
     }
     private boolean validOutput(String id){return alive&&dialogue&&speaking&&id.equals("assistant-"+outputEpoch);}
@@ -199,15 +235,20 @@ public final class AssistantService extends Service {
         if(voice==null){endDialogue("한국어 기본 음성을 휴대폰 TTS 설정에서 준비해주세요.");return;}
         tts.setVoice(voice);if(tts.speak(value,TextToSpeech.QUEUE_FLUSH,null,"assistant-"+outputEpoch)!=TextToSpeech.SUCCESS)endDialogue("기본 음성을 시작하지 못했어요.");
     }
-    private void speechDone(){if(!alive||!dialogue||!speaking)return;speaking=false;outputStarted=null;state=microphone!=null?"듣고 있어요. 이어서 말씀하거나 취소라고 말해주세요.":"답변 완료 · 버튼을 누르면 대화를 시작해요.";publish();if(microphone==null)endDialogue(state);}
-    private void endDialogue(String message){cancelRequests();cancelOutput();pendingCall=null;dialogue=false;microphoneEpoch++;AssistantMic old=microphone;microphone=null;if(old!=null)old.close();inputSegment=-1;if(wake!=null&&wake.isHeld())wake.release();if(focusHeld){audio.abandonAudioFocusRequest(focus);focusHeld=false;}state=message;publish();}
+    void speechDone(){
+        if(!alive||!dialogue||!speaking)return;
+        // Keep a spoken phone confirmation pending across the next button turn.
+        cancelRequests();cancelOutput();closeInput();turns.idle();dialogue=false;releaseDialogueAudio();
+        state="답변 완료 · 버튼을 누르면 다음 질문을 녹음해요.";publish();
+    }
+    private void endDialogue(String message){cancelRequests();cancelOutput();closeInput();pendingCall=null;turns.idle();dialogue=false;releaseDialogueAudio();state=message;publish();}
     private Notification notification(){
         PendingIntent open=PendingIntent.getActivity(this,610,new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         PendingIntent trigger=PendingIntent.getService(this,611,new Intent(this,AssistantService.class).setAction(TRIGGER),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         PendingIntent stop=PendingIntent.getService(this,612,new Intent(this,AssistantService.class).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        return new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentTitle("길잡이 음성비서").setContentText(dialogue?"대화 모드 · 말하거나 버튼으로 끊기":"버튼 대기 · 누르면 듣기 시작").setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).addAction(android.R.drawable.ic_btn_speak_now,"말하기 / 끊기",trigger).addAction(android.R.drawable.ic_media_pause,"비서 중지",stop).build();
+        return new NotificationCompat.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentTitle("길잡이 음성비서").setContentText(turns.label()).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).addAction(android.R.drawable.ic_btn_speak_now,turns.label(),trigger).addAction(android.R.drawable.ic_media_pause,"비서 중지",stop).build();
     }
-    private void publish(){if(instance!=this)return;last=new Snapshot(alive&&foreground,BoardService.ready(),dialogue,address,state,heard,answer,bleStatus,inputRoute,places,mapRequested);for(Observer o:OBSERVERS)o.state(last);if(foreground){NotificationManager n=getSystemService(NotificationManager.class);if(n!=null)n.notify(NOTICE,notification());}}
+    private void publish(){if(instance!=this)return;last=new Snapshot(alive&&foreground,BoardService.ready(),dialogue,address,state,heard,answer,bleStatus,inputRoute,places,mapRequested,turns.label(),turns.enabled());for(Observer o:OBSERVERS)o.state(last);if(foreground){NotificationManager n=getSystemService(NotificationManager.class);if(n!=null)n.notify(NOTICE,notification());}}
     private void shutdown(){if(!alive)return;endDialogue("음성비서 꺼짐");alive=false;foreground=false;BoardService.forget(boardObserver);main.removeCallbacksAndMessages(null);if(eleven!=null)eleven.close();if(tts!=null){tts.shutdown();tts=null;}io.shutdownNow();ServiceCompat.stopForeground(this,ServiceCompat.STOP_FOREGROUND_REMOVE);publish();}
     @Override public void onDestroy(){shutdown();if(instance==this)instance=null;super.onDestroy();}
     @Override public IBinder onBind(Intent intent){return null;}

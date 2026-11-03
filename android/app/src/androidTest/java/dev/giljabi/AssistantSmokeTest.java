@@ -8,27 +8,43 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.rule.GrantPermissionRule;
 import androidx.test.uiautomator.UiDevice;
-import ai.onnxruntime.*;
-import java.io.*;
-import java.nio.*;
-import java.util.*;
+import java.io.IOException;
+import java.util.concurrent.*;
 import org.junit.*;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class AssistantSmokeTest {
-    @Rule public GrantPermissionRule permissions=GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO,Manifest.permission.POST_NOTIFICATIONS);
+    @Rule public GrantPermissionRule permissions=GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO,Manifest.permission.POST_NOTIFICATIONS,Manifest.permission.BLUETOOTH_CONNECT);
     private Context context(){return InstrumentationRegistry.getInstrumentation().getTargetContext();}
     private void main(Runnable action){InstrumentationRegistry.getInstrumentation().runOnMainSync(action);}
-    @Test public void bundledSpeechDetectorRunsOnAndroidAndRejectsSilence()throws Exception{
-        byte[] bytes;try(InputStream in=context().getAssets().open("silero_vad.onnx");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] block=new byte[8192];int n;while((n=in.read(block))!=-1)out.write(block,0,n);bytes=out.toByteArray();}
-        OrtEnvironment env=OrtEnvironment.getEnvironment();float[] memory=new float[256];
-        try(OrtSession.SessionOptions options=new OrtSession.SessionOptions();OrtSession session=env.createSession(bytes,options)){
-            for(int frame=0;frame<16;frame++)try(OnnxTensor x=OnnxTensor.createTensor(env,FloatBuffer.wrap(new float[576]),new long[]{1,576});OnnxTensor state=OnnxTensor.createTensor(env,FloatBuffer.wrap(memory),new long[]{2,1,128});OnnxTensor rate=OnnxTensor.createTensor(env,LongBuffer.wrap(new long[]{16000}),new long[0]);OrtSession.Result result=session.run(new HashMap<String,OnnxTensor>(){{put("input",x);put("state",state);put("sr",rate);}})){
-                assertTrue(((OnnxTensor)result.get(0)).getFloatBuffer().get(0)<.3f);((OnnxTensor)result.get(1)).getFloatBuffer().get(memory);
-            }
-        }
+    private static final class Probe implements AssistantInput.Listener {
+        final CountDownLatch ready=new CountDownLatch(1),done=new CountDownLatch(1);
+        volatile String failure,route;volatile byte[] wav;volatile boolean limit;
+        public void ready(String route){this.route=route;ready.countDown();}
+        public void finished(byte[] wav,boolean reachedLimit){this.wav=wav;limit=reachedLimit;done.countDown();}
+        public void error(String message){failure=message;ready.countDown();done.countDown();}
+    }
+    @Test public void realManualMicrophoneWaitsForButtonAndProducesWav()throws Exception{
+        Probe probe=new Probe();AssistantMic mic=new AssistantMic(context(),probe);
+        try{
+            mic.start();assertTrue("microphone did not start",probe.ready.await(10,TimeUnit.SECONDS));assertNull(probe.failure);assertNotNull(probe.route);
+            boolean ended=probe.done.await(16,TimeUnit.SECONDS);
+            if(ended){assertNull(probe.failure);assertTrue("only the hard size limit may end a recording without a button",probe.limit);}
+            else{mic.finish();assertTrue("finish did not release recording",probe.done.await(10,TimeUnit.SECONDS));}
+            assertNull(probe.failure);assertNotNull(probe.wav);assertTrue(probe.wav.length>6400);assertTrue(probe.wav.length<=AssistantWav.MAX_WAV);
+            assertEquals('R',probe.wav[0]);assertEquals('I',probe.wav[1]);assertEquals('F',probe.wav[2]);assertEquals('F',probe.wav[3]);
+        }finally{mic.close();}
+    }
+    @Test public void cancellingInputLetsTheNextButtonTurnAcquireMicrophone()throws Exception{
+        Probe first=new Probe(),next=new Probe();AssistantMic a=new AssistantMic(context(),first),b=new AssistantMic(context(),next);
+        try{
+            a.start();assertTrue(first.ready.await(10,TimeUnit.SECONDS));assertNull(first.failure);a.close();
+            b.start();assertTrue("previous recording kept the input device",next.ready.await(10,TimeUnit.SECONDS));assertNull(next.failure);assertNotNull(next.route);
+            Thread.sleep(350);b.finish();assertTrue(next.done.await(10,TimeUnit.SECONDS));assertNull(next.failure);assertNotNull(next.wav);
+            assertNull("cancelled input delivered audio",first.wav);
+        }finally{a.close();b.close();}
     }
     @Test public void enabledButtonServiceRemainsIdleAfterHomeAndStopsExplicitly()throws Exception{
         UiDevice device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());

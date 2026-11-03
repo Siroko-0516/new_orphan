@@ -31,7 +31,7 @@ final class GeminiClient {
     }
     static byte[] assistantPayload(byte[] wav,String text,String history,String model)throws IOException {
         if(wav==null&&(text==null||text.trim().isEmpty()||text.length()>1000))throw new IOException("질문을 입력하세요.");
-        if(wav!=null&&(wav.length<44||wav.length>400044||wav[0]!='R'||wav[1]!='I'||wav[2]!='F'||wav[3]!='F'))throw new IOException("음성 입력 형식을 확인하세요.");
+        if(wav!=null&&(wav.length<44||wav.length>AssistantWav.MAX_WAV||wav[0]!='R'||wav[1]!='I'||wav[2]!='F'||wav[3]!='F'))throw new IOException("음성 입력 형식을 확인하세요.");
         try{
             JSONArray parts=new JSONArray();
             if(wav!=null)parts.put(new JSONObject().put("inlineData",new JSONObject().put("mimeType","audio/wav").put("data",Base64.getEncoder().encodeToString(wav))));

@@ -11,6 +11,25 @@ on:
 permissions:
   contents: read
 jobs:
+  prepare-signing:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Seed the signing cache on the default branch for future tags
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: giljabi-full-debug-signing-v1
+      - name: Create a test signing key only if the shared cache is empty
+        run: |
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            mkdir -p "$HOME/.android"
+            keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
+          fi
   camera-smoke:
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -185,8 +204,8 @@ jobs:
           shutil.copyfile('build-validation.json',folder/'checks.json')
           shutil.copyfile('native-validation.json',folder/'native-checks.json')
           shutil.copyfile('guidance-native-validation.json',folder/'guidance-checks.json')
-          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v4.zip',folder/'Giljabi-UNO-HM10-SG90-v4.zip')
-          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v4.zip.sha256',folder/'Giljabi-UNO-HM10-SG90-v4.zip.sha256')
+          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v5.zip',folder/'Giljabi-UNO-HM10-SG90-v5.zip')
+          shutil.copyfile('downloads/Giljabi-UNO-HM10-SG90-v5.zip.sha256',folder/'Giljabi-UNO-HM10-SG90-v5.zip.sha256')
           shutil.copyfile('downloads/Giljabi-SG90-D2-Test-v1.zip',folder/'Giljabi-SG90-D2-Test-v1.zip')
           shutil.copyfile('downloads/Giljabi-SG90-D2-Test-v1.zip.sha256',folder/'Giljabi-SG90-D2-Test-v1.zip.sha256')
           name='giljabi-'+version+'-debug.apk';target=folder/name
@@ -207,7 +226,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 0.9.1 · AI 중지 후 BLE 연결 유지' --notes-file android/FULL_RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" release-apk/* --prerelease --title '길잡이 0.9.2 · 버튼으로 녹음 시작·전송·답변 중단' --notes-file android/FULL_RELEASE_NOTES.md
   release-notes:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04

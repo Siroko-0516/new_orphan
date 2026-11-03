@@ -1,6 +1,17 @@
 # 길잡이 테스트 APK
 
-## 최신 · AI 중지 후 BLE 연결 유지 · 0.9.1-full
+## 최신 · 버튼으로 녹음 시작·전송·답변 중단 · 0.9.2-full
+
+**[giljabi-0.9.2-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.2-full/giljabi-0.9.2-full-debug.apk)** · [릴리스·검사 결과](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.2-full)
+
+- **버튼 한 번 → 녹음 시작 / 말을 마치고 다시 한 번 → 녹음 전송.** 답변 중 버튼은 이전 답변·요청을 취소하고 새 녹음을 시작합니다.
+- 말소리로 자동 중단하지 않으며, 무음으로 전송하지 않습니다. 답변 후에는 마이크를 닫고 다음 버튼을 기다립니다. 최대 60초 녹음 후에도 버튼을 눌러야 전송합니다.
+- 앱·알림·보드 버튼에 같은 동작을 적용합니다. 기존 카메라·로컬/Gemini·음성·전화·GPS·독립 BLE 연결을 유지합니다.
+- **[UNO 정식 v5](https://raw.githubusercontent.com/Siroko-0516/new_orphan/main/downloads/Giljabi-UNO-HM10-SG90-v5.zip)는 그대로 사용합니다.** 임시 모터 점검 코드가 아닌지 확인하세요.
+
+[버튼 음성비서 사용법](../android/ASSISTANT.md). 실제 보드·이어폰·전화 통합 동작은 기기에서 확인합니다.
+
+## 이전 · AI 중지 후 BLE 연결 유지 · 0.9.1-full
 
 **[giljabi-0.9.1-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.1-full/giljabi-0.9.1-full-debug.apk)** · [릴리스·체크섬](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.1-full)
 
