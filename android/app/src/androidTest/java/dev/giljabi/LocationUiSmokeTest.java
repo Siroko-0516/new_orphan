@@ -58,7 +58,12 @@ public class LocationUiSmokeTest {
             await("Updated GPS was not available",()->{Location l=manager.getLastKnownLocation(LocationManager.GPS_PROVIDER);return l!=null&&Math.abs(l.getLatitude()-37.5005)<.000001;});
             activity.onActivity(a->AssistantService.ask(a,"내 위치가 어디야"));
             await("New request kept an old GPS position",()->AssistantService.snapshot().locationText.contains("37.50050")&&AssistantService.snapshot().mapUrl.endsWith("37.5005,127.0005"));
-            activity.onActivity(a->{TextView label=find(a.getWindow().getDecorView(),"37.50050",false);assertNotNull("Coordinates are missing from the actual activity",label);label.requestRectangleOnScreen(new Rect(0,0,label.getWidth(),label.getHeight()),true);});
+            activity.onActivity(a->{
+                TextView label=find(a.getWindow().getDecorView(),"37.50050",false);assertNotNull("Coordinates are missing from the actual activity",label);
+                ViewParent parent=label.getParent();while(parent!=null&&!(parent instanceof android.widget.ScrollView))parent=parent.getParent();assertNotNull(parent);
+                android.widget.ScrollView scroll=(android.widget.ScrollView)parent;Rect target=new Rect();label.getDrawingRect(target);scroll.offsetDescendantRectToMyCoords(label,target);scroll.scrollTo(0,Math.max(0,target.top-scroll.getHeight()/3));
+                Rect visible=new Rect();assertTrue("GPS text is outside the visible viewport",label.getGlobalVisibleRect(visible));assertTrue("GPS text is clipped",visible.height()>=label.getHeight());
+            });
             SystemClock.sleep(500);
             File folder=new File(context().getFilesDir(),"location-system");assertTrue(folder.isDirectory()||folder.mkdirs());
             assertTrue(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(new File(folder,"location-system-screen.png")));
