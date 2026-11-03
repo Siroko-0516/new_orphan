@@ -19,7 +19,24 @@
     "provider config survives service Intent with no API key",
     "camera and assistant controls coexist"
   ],
-  "ci_android15_and_full_apk": "pending release build",
+  "ci_android15_and_full_apk": {
+    "result": "passed",
+    "ci_run": 41644386513,
+    "source": "9a6d94bc404a0565a7b36006f6094c42d064fdba",
+    "release_tag": "android-v0.9.3-full",
+    "scope": [
+      "Android 15 LocationManager returns an explicitly seeded emulator location",
+      "MODIFY_AUDIO_SETTINGS and Android communication audio mode",
+      "real AudioRecord manual finish, cancellation and microphone reacquisition",
+      "assistant idle foreground service survives Home",
+      "Camera2 and YOLO regression",
+      "295 unit tests and lint",
+      "UNO v5 compilation",
+      "existing native local-model regressions"
+    ],
+    "physical_gps_or_sim_call_tested": false,
+    "live_openai_tested": false
+  },
   "openai_live": "not tested; no OpenAI key configured in this environment",
   "live_map_services": "not tested; mocked responses and fallback URLs checked",
   "not_verified": [
@@ -27,5 +44,73 @@
     "real SIM call connection; telephone gateway is mocked",
     "physical HM-10 and wireless earbuds",
     "live OpenAI responses and per-account model permissions"
-  ]
+  ],
+  "published_apk": {
+    "version": "0.9.3-full",
+    "version_code": 19,
+    "name": "giljabi-0.9.3-full-debug.apk",
+    "bytes": 1828272025,
+    "sha256": "ca00af824ec7e62f175f4da4decedad96f542193cebe0aae8054e9d0d5260c74",
+    "uno_v5_sha256": "d28797ad3f83163ed5a99bd1b475b8576b15fbbc9daa90064aeff1d438cc7274",
+    "apk_v2_verified": true,
+    "certificate_sha256": "629ac79c1cdedad07f109d94bca29c0a0ef94f38a6316a464309ba098167f10e",
+    "same_certificate_as_0_9_2": false,
+    "zipalign_16k": true,
+    "models": {
+      "model.gguf": {
+        "bytes": 672003680,
+        "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d"
+      },
+      "mmproj.gguf": {
+        "bytes": 1110117984,
+        "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900"
+      }
+    },
+    "elf_16k_libraries": [
+      "libc++_shared.so",
+      "libggml-base.so",
+      "libggml-cpu-android_armv8.0_1.so",
+      "libggml-cpu-android_armv8.2_1.so",
+      "libggml-cpu-android_armv8.2_2.so",
+      "libggml-cpu-android_armv8.6_1.so",
+      "libggml-vulkan.so",
+      "libggml.so",
+      "libgiljabi_native.so",
+      "libllama-common.so",
+      "libllama.so",
+      "libmtmd.so",
+      "libonnxruntime.so",
+      "libonnxruntime4j_jni.so",
+      "libtranslate_jni.so"
+    ],
+    "new_native_location_and_openai_classes_present": true,
+    "manual_button_state_present": true,
+    "fixed_elevenlabs_voices_preserved": true,
+    "credential_pattern_check_passed": true,
+    "checks": {
+      "tests": 295,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "lint_errors": 0
+    }
+  },
+  "native_checks": {
+    "template_failure_reproduced": true,
+    "complete_turn_rendering_passed": true,
+    "jni_exception_guard_passed": true
+  },
+  "guidance_checks": {
+    "host_only": true,
+    "physical_phone_latency_verified": false,
+    "production_jni_used": true,
+    "shared_walking_prompt_parser_used": true,
+    "guidance_protocol_passed": true,
+    "fixture": "public engine landscape 1.jpg",
+    "scenery_alert_suppressed": true,
+    "guidance_reply": "{\"speak\":true,\"message\":\"A rocky outcrop in the foreground blocks the view of the valley.\",\"urgency\":\"notice\"}",
+    "english_caption": "A rugged mountain viewpoint frames a deep, green-flooded valley winding between steep, forested cliffs under a bright sky.",
+    "host_phase_seconds": "prepare=1.530 image=13.065 generation=0.806",
+    "host_caption_seconds": "12.600"
+  }
 }
