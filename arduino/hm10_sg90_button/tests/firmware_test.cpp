@@ -22,17 +22,22 @@ void buttonScenario(uint8_t released){
     changeButton(released);assert(hm10.output=="ASSIST\n");
     changeButton(pressed);assert(hm10.output=="ASSIST\nASSIST\n");
 }
-void gestureAndDeferredButton(uint8_t released){
+void largerGestureAndResponsiveButton(uint8_t released){
     boot(released);hm10.feed("OBSTACLE\r\n");loop();unsigned long start=fakeMillis;
     assert(moving&&warningServo.attached);
-    changeButton(released==HIGH?LOW:HIGH);assert(hm10.output.empty());
+    changeButton(released==HIGH?LOW:HIGH);
+    assert(moving);assert(hm10.output=="ASSIST\n");
+    fakeMillis=start+179;loop();assert(warningServo.angles.size()==1);
     fakeMillis=start+180;loop();
     hm10.feed("TEST\nOBSTACLE\n"); // Alerts during motion must not queue another gesture.
-    fakeMillis=start+340;loop();fakeMillis=start+500;loop();
-    assert(hm10.output.empty());fakeMillis=start+760;loop();
+    for(unsigned long at:{400UL,620UL,840UL,1060UL,1280UL,1500UL}){fakeMillis=start+at;loop();}
+    fakeMillis=start+1739;loop();assert(moving&&warningServo.attached);
+    fakeMillis=start+1740;loop();
     assert(!moving&&!warningServo.attached);
-    assert((warningServo.angles==std::vector<uint8_t>{90,80,100,90}));
+    assert((warningServo.angles==std::vector<uint8_t>{90,45,135,45,135,45,135,90}));
+    for(uint8_t angle:warningServo.angles)assert(angle>=45&&angle<=135);
     assert(hm10.output=="ASSIST\n");advance(2000);assert(hm10.output=="ASSIST\n");
+    assert(warningServo.angles.size()==8&&!moving);
 }
 void commandScenario(){
     boot(HIGH);hm10.feed("UNKNOWN\n");loop();assert(!moving);
@@ -41,7 +46,7 @@ void commandScenario(){
 }
 int main(){
     buttonScenario(HIGH);buttonScenario(LOW);
-    gestureAndDeferredButton(HIGH);gestureAndDeferredButton(LOW);
+    largerGestureAndResponsiveButton(HIGH);largerGestureAndResponsiveButton(LOW);
     commandScenario();
-    std::cout<<"Passed firmware scenarios: both button polarities, debounce, hold/release, motor phases, deferred button, UART framing.\n";
+    std::cout<<"Passed firmware scenarios: both button polarities, debounce, hold/release, bounded triple sweep, live button during motion, UART framing.\n";
 }

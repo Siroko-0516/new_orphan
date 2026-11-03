@@ -1,6 +1,6 @@
 # 길잡이 0.9.1 · HM-10 버튼 음성비서
 
-길잡이 Android 앱에서 처리합니다. UNO는 버튼을 눌렀을 때 `ASSIST\n`을 보내고, 앱의 `TEST\n`·`OBSTACLE\n`을 받는 역할입니다. 친구에게는 [배선·UNO 코드](../arduino/hm10_sg90_button/README.md)와 [압축 파일](../downloads/Giljabi-UNO-HM10-SG90-v3.zip)을 전달하면 됩니다. ESP32-CAM에 UNO 코드를 업로드하지 마세요.
+길잡이 Android 앱에서 처리합니다. UNO는 버튼을 눌렀을 때 `ASSIST\n`을 보내고, 앱의 `TEST\n`·`OBSTACLE\n`을 받는 역할입니다. 친구에게는 [배선·UNO 코드](../arduino/hm10_sg90_button/README.md)와 [압축 파일](../downloads/Giljabi-UNO-HM10-SG90-v4.zip)을 전달하면 됩니다. ESP32-CAM에 UNO 코드를 업로드하지 마세요.
 
 ## 시작
 

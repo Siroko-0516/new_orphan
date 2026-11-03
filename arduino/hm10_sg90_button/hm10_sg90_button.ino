@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // UNO R3 + HM-10 UART + SG90 + momentary button. Read README before wiring.
+// v4: three fast 45..135 degree sweeps, then return to the center.
 #include <Arduino.h>
 #include <Servo.h>
 #include <string.h>
@@ -10,8 +11,8 @@ const uint8_t BUTTON_PIN = 3;
 // false: bare 2-pin switch between D3 and GND.
 const bool BUTTON_MODULE = true;
 const uint8_t CENTER_ANGLE = 90;
-const uint8_t LEFT_ANGLE = 80;
-const uint8_t RIGHT_ANGLE = 100;
+const uint8_t LEFT_ANGLE = 45;
+const uint8_t RIGHT_ANGLE = 135;
 // Hardware UART shared with USB. Disconnect D0/D1 wires before uploading.
 // HM-10 TX -> UNO D0 (RX); UNO D1 (TX) -> divider -> HM-10 RX.
 HardwareSerial &hm10 = Serial;
@@ -22,7 +23,17 @@ bool discardLine = false;
 bool moving = false;
 uint8_t phase = 0;
 unsigned long phaseAt = 0;
-const unsigned long phaseMs[] = {180, 160, 160, 260};
+const uint8_t warningAngles[] = {
+  CENTER_ANGLE,
+  LEFT_ANGLE, RIGHT_ANGLE,
+  LEFT_ANGLE, RIGHT_ANGLE,
+  LEFT_ANGLE, RIGHT_ANGLE,
+  CENTER_ANGLE
+};
+const unsigned long phaseMs[] = {180, 220, 220, 220, 220, 220, 220, 240};
+const uint8_t PHASE_COUNT = sizeof(warningAngles) / sizeof(warningAngles[0]);
+static_assert(sizeof(phaseMs) / sizeof(phaseMs[0]) == PHASE_COUNT,
+              "Each servo angle needs a hold duration");
 bool rawButton = HIGH;
 bool stableButton = HIGH;
 uint8_t releasedLevel = HIGH;
@@ -33,7 +44,7 @@ unsigned long lastAssistAt = 0;
 void startWarning() {
   if (moving) return; // Coalesce alerts; no queued/unbounded motor movement.
   warningServo.attach(SERVO_PIN);
-  warningServo.write(CENTER_ANGLE);
+  warningServo.write(warningAngles[0]);
   digitalWrite(LED_BUILTIN, HIGH);
   moving = true;
   phase = 0;
@@ -44,9 +55,7 @@ void updateWarning() {
   if (!moving || millis() - phaseAt < phaseMs[phase]) return;
   phaseAt = millis();
   phase++;
-  if (phase == 1) warningServo.write(LEFT_ANGLE);
-  else if (phase == 2) warningServo.write(RIGHT_ANGLE);
-  else if (phase == 3) warningServo.write(CENTER_ANGLE);
+  if (phase < PHASE_COUNT) warningServo.write(warningAngles[phase]);
   else {
     warningServo.detach();
     digitalWrite(SERVO_PIN, LOW);
@@ -99,7 +108,8 @@ void loop() {
     }
   }
   updateWarning();
-  if (!moving && assistantPending && millis() - lastAssistAt >= 800UL) {
+  // Hardware UART keeps the button responsive even during the longer gesture.
+  if (assistantPending && millis() - lastAssistAt >= 800UL) {
     hm10.print("ASSIST\n");
     assistantPending = false;
     lastAssistAt = millis();

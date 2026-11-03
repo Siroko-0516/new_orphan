@@ -13,7 +13,7 @@
 
 ## UNO·서보 확인
 
-현재 v3 배선은 **서보 신호 D2 / 버튼 S D3 / HM-10 TXD→UNO D0(RX) / UNO D1(TX)→분압→HM-10 RXD**입니다. [UNO 전체 코드](../arduino/hm10_sg90_button/README.md)를 참고하세요. D0·D1은 USB 업로드와 공유하므로 업로드할 때 통신선을 분리합니다.
+현재 v4 배선은 **서보 신호 D2 / 버튼 S D3 / HM-10 TXD→UNO D0(RX) / UNO D1(TX)→분압→HM-10 RXD**입니다. [UNO 전체 코드](../arduino/hm10_sg90_button/README.md)를 참고하세요. D0·D1은 USB 업로드와 공유하므로 업로드할 때 통신선을 분리합니다.
 
 USB 시리얼 모니터 9600 baud·새줄에서 TEST를 보냈을 때 L LED가 잠깐 켜지면 UNO의 명령 처리는 확인된 것입니다. 서보가 움직이지 않는다면 [서보 단독 시험](../arduino/sg90_d2_test/README.md)으로 확인합니다. 이 시험은 BLE·AI 없이 60→120→90도를 각각 2초씩 유지합니다. LED만 바뀌면 서보의 공급 전압·전류, 공통 GND, 신호 접촉, 서보 자체를 확인해야 합니다. 실물 동작은 소프트웨어 빌드 검사로 확인할 수 없습니다.
 
