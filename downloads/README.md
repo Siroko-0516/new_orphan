@@ -16,6 +16,8 @@ APK는 1,828,272,025바이트(약 1.83GB), SHA-256은 `ca00af824ec7e62f175f4da4d
 
 [위치·전화·지도·GPT 사용법](../android/PHONE_LOCATION_GPT.md) · [검증 기록](../android/PHONE_LOCATION_GPT_VALIDATION.json).
 
+추가 컴퓨터 검사: 실제 Android 전화 서비스의 [발신 화면](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/phone-system-screen.png)과 앱의 [GPS 좌표·지도 링크 화면](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/location-system-screen.png)을 확인했습니다. GPS는 주입한 테스트 좌표이며 실제 위성 수신과 통신망 통화는 검증하지 않았습니다.
+
 ## 이전 · 버튼으로 녹음 시작·전송·답변 중단 · 0.9.2-full
 
 **[giljabi-0.9.2-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.2-full/giljabi-0.9.2-full-debug.apk)** · [릴리스·검사 결과](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.2-full)

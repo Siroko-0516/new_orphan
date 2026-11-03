@@ -50,6 +50,12 @@ Gemini와 로컬 AI는 유지합니다. 클라우드 음성은 기존 고정 Ele
 
 단위 검사 **295개와 lint 오류 0**, Android 15 위치·녹음·대기 서비스·카메라 검사, UNO 컴파일과 기존 네이티브 회귀 검사를 [전체 릴리스 작업](https://github.com/Siroko-0516/new_orphan/actions/runs/41644386513)에서 통과했습니다. 공개 APK를 직접 내려받아 버전·SHA-256·v2 서명·16KB ZIP/ELF 정렬·모델 해시·새 위치/GPT 코드와 기존 고정 음성 포함을 확인했습니다. SHA-256은 `ca00af824ec7e62f175f4da4decedad96f542193cebe0aae8054e9d0d5260c74`입니다.
 
-전화·현재 위치 명령의 앱 분기, 발신 전 음성 확인과 한 번만 발신, 권한 거절, 지도 서버 오류 대체 링크, OpenAI 사진·음성 HTTP 형식과 취소·오류·키 보호를 검사합니다. Android에서는 명시적으로 주입한 에뮬레이터 위치와 실제 위치 API를 사용하며 실제 사용자의 GPS 수신이라고 주장하지 않습니다. 전화 검사는 시스템 API 경로를 모의 처리하며 실제 번호로 전화하지 않습니다.
+전화·현재 위치 명령의 앱 분기, 발신 전 음성 확인과 한 번만 발신, 권한 거절, 지도 서버 오류 대체 링크, OpenAI 사진·음성 HTTP 형식과 취소·오류·키 보호를 단위 검사합니다. 단위 검사의 전화 API는 모의 처리합니다.
+
+**추가 컴퓨터 검사에서는 실제 Android 15의 연락처·Telecom·Google 전화 화면을 사용했습니다.** 테스트 연락처 조회 → 앱의 발신 코드 → 시스템 통화 등록 → 발신 화면을 확인했습니다. 전화 API를 모의 처리하지 않은 검사이며 [실행 기록](https://github.com/Siroko-0516/new_orphan/actions/runs/41671059104) · [발신 화면](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/phone-system-screen.png) · [결과 JSON](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/phone-system-check.json)을 공개합니다. 가상 모뎀의 통화 상태를 검사했으며 실제 통신망이나 상대편 연결, 가상 상대 전화기의 수신은 확인하지 못했습니다. 이 실행 검사는 음성인식과 발신 확인 음성의 실제 재생을 포함하지 않습니다.
+
+**GPS는 실제 앱의 현재 위치 버튼 → 좌표 표시 → 새 위치로 갱신 → 지도 링크 변경까지 확인했습니다.** Android 위치 API에 명시적으로 넣은 테스트 좌표를 사용합니다. Wi-Fi·모바일 데이터를 끈 상태에서도 좌표와 지도 링크가 만들어지는지 검사했으며, 실제 위성 수신과 실시간 주소 조회는 검증하지 않았습니다. [GPS 실행 기록](https://github.com/Siroko-0516/new_orphan/actions/runs/41671058492) · [위치 화면](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/location-system-screen.png) · [결과 JSON](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/location-system-check.json).
+
+두 추가 검사는 공개 0.9.3과 `src/main`·앱 빌드 설정이 같은지 확인한 뒤, 로컬 모델을 넣지 않은 x86_64 검사 빌드로 실행합니다.
 
 실제 HM-10·사용자 배선·무선이어폰·SIM 통화·GPS 수신·실시간 지도 서비스 응답은 사용자 기기에서 확인해야 합니다. OpenAI 키가 개발 환경에 설정돼 있지 않아 실제 OpenAI 응답을 확인했다고 주장하지 않습니다. [검증 기록](PHONE_LOCATION_GPT_VALIDATION.json).

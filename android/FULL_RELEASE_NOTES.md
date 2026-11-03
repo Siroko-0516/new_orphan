@@ -16,6 +16,8 @@
 
 SHA-256: `ca00af824ec7e62f175f4da4decedad96f542193cebe0aae8054e9d0d5260c74`.
 
+추가 컴퓨터 검사에서 **실제 Android 전화 서비스에 발신이 등록되고 전화 화면이 열리는 것**, **앱의 현재 위치 버튼으로 테스트 GPS 좌표를 받아 표시·갱신하고 지도 링크를 바꾸는 것**을 확인했습니다. 공개 0.9.3과 같은 Java 앱 소스의 x86_64 검사 빌드를 사용했습니다. [발신 화면](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/phone-system-screen.png) · [GPS 화면](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/location-system-screen.png) · [검사 범위와 실행 기록](https://github.com/Siroko-0516/new_orphan/blob/main/android/PHONE_LOCATION_GPT.md#검사-범위). 실제 통신망·상대편 연결·휴대폰 GPS 위성 수신·실시간 주소 조회는 기기 확인이 필요합니다.
+
 **0.9.2 · 버튼으로 녹음 시작·전송·답변 중단**
 
 물리 버튼이나 앱 버튼을 **한 번 누르면 녹음 시작 → 말을 마치고 다시 누르면 전송**합니다. Gemini가 답변 중일 때 버튼을 누르면 이전 답변·요청을 취소하고 새 녹음을 시작합니다. 새 질문도 두 번째 버튼으로 전송합니다.
