@@ -69,7 +69,15 @@ jobs:
               if not result['virtual_peer_received_call']: raise SystemExit('Peer emulator did not receive the outgoing call')
               report.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
           print(json.dumps(totals))
-          if totals!={'tests':1,'failures':0,'errors':0,'skipped':0}: raise SystemExit('Phone system test did not pass exactly once')
+          if totals!={'tests':1,'failures':0,'errors':0,'skipped':0}:
+              for name in ['android/phone-system-validation/peer-emulator.log','android/phone-system-smoke.log']:
+                  file=Path(name)
+                  if file.exists():
+                      message='\n'.join(file.read_text(errors='replace').splitlines()[-45:])[-6000:]
+                      for start in range(0,len(message),3000):
+                          part=message[start:start+3000]
+                          print('::error title='+file.name+'::'+part.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+              raise SystemExit('Phone system test did not pass exactly once')
           PY
       - name: Upload the test evidence
         if: always()
