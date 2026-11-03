@@ -5,9 +5,12 @@ on:
     paths:
       - 'arduino/hm10_sg90_button/**'
       - 'arduino/sg90_d2_test/**'
+      - 'arduino/hm10_uart_diagnostic/**'
       - '.github/workflows/uno-firmware.yml'
       - 'downloads/Giljabi-UNO-HM10-SG90-v4-UART115200-test.zip'
       - 'downloads/Giljabi-UNO-HM10-SG90-v4-UART115200-test.zip.sha256'
+      - 'downloads/Giljabi-UNO-UART-Diagnostic-v1.zip'
+      - 'downloads/Giljabi-UNO-UART-Diagnostic-v1.zip.sha256'
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,6 +27,9 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -I arduino/hm10_sg90_button/tests arduino/hm10_sg90_button/tests/firmware_test.cpp -o "$RUNNER_TEMP/uno-firmware-test"
           "$RUNNER_TEMP/uno-firmware-test"
+          g++ -std=c++17 -Wall -Wextra -Werror -I arduino/hm10_sg90_button/tests arduino/hm10_uart_diagnostic/tests/diagnostic_test.cpp -o "$RUNNER_TEMP/uart-diagnostic-test"
+          "$RUNNER_TEMP/uart-diagnostic-test" HIGH
+          "$RUNNER_TEMP/uart-diagnostic-test" LOW
       - name: Compile for the actual UNO board
         run: |
           arduino-cli core update-index
@@ -31,6 +37,7 @@ jobs:
           arduino-cli lib install Servo@1.2.2
           arduino-cli compile --fqbn arduino:avr:uno arduino/hm10_sg90_button
           arduino-cli compile --fqbn arduino:avr:uno arduino/sg90_d2_test
+          arduino-cli compile --fqbn arduino:avr:uno arduino/hm10_uart_diagnostic
       - name: Verify and compile the exact UART 115200 diagnostic download
         run: |
           python3 - <<'PY'
@@ -46,3 +53,18 @@ jobs:
               z.extractall(Path(os.environ['RUNNER_TEMP'])/'uart-diagnostic')
           PY
           arduino-cli compile --fqbn arduino:avr:uno "$RUNNER_TEMP/uart-diagnostic/hm10_115200_test"
+      - name: Verify and compile the exact receive-only diagnostic download
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, zipfile, hashlib
+          p = Path('downloads/Giljabi-UNO-UART-Diagnostic-v1.zip')
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == Path(str(p)+'.sha256').read_text().split()[0]
+          base = Path('arduino/hm10_uart_diagnostic')
+          with zipfile.ZipFile(p) as z:
+              assert set(z.namelist()) == {'hm10_uart_diagnostic/hm10_uart_diagnostic.ino', 'hm10_uart_diagnostic/README.md'}
+              for name in ('hm10_uart_diagnostic.ino', 'README.md'):
+                  assert z.read('hm10_uart_diagnostic/'+name) == (base/name).read_bytes()
+              z.extractall(Path(os.environ['RUNNER_TEMP'])/'receive-diagnostic')
+          PY
+          arduino-cli compile --fqbn arduino:avr:uno "$RUNNER_TEMP/receive-diagnostic/hm10_uart_diagnostic"

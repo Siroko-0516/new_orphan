@@ -14,3 +14,9 @@
 이 시험으로 원인이 확정된 것은 아닙니다. 반응이 없으면 원래 v4(9600)로 돌아갈 수 있습니다. HM-10에 AT 명령을 보내거나 설정을 영구 변경하지 않습니다. 추가 확인에는 실제 수신 데이터나 모듈 모델·전원 정보가 필요합니다.
 
 [115200 확인용 전체 코드 ZIP](../../downloads/Giljabi-UNO-HM10-SG90-v4-UART115200-test.zip) · [원래 v4 9600 ZIP](../../downloads/Giljabi-UNO-HM10-SG90-v4.zip)
+
+## 속도를 바꿔도 반응이 없을 때
+
+[수신 기록 점검 v1](../hm10_uart_diagnostic/README.md)은 UNO에 도착한 실제 바이트를 PC 시리얼 모니터에 표시합니다. 점검 중에는 HM-10 TXD→UNO D0만 연결하고 HM-10 RXD를 분리합니다. UART와 모니터는 모두 9600으로 맞춥니다. 이 임시 코드에서는 물리 버튼이 서보를 직접 시험하며, 로그를 출력하므로 일반 v4의 양방향 배선 상태로 사용하지 않습니다.
+
+[수신 기록 점검 전체 코드 ZIP](../../downloads/Giljabi-UNO-UART-Diagnostic-v1.zip)
