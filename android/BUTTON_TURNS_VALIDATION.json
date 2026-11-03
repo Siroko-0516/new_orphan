@@ -18,10 +18,75 @@
     "microphone_open_during_answers": false
   },
   "firmware": "UNO v5 unchanged; ASSIST newline on physical button",
-  "ci_android15_and_full_apk": "pending release build",
+  "ci_android15_and_full_apk": {
+    "result": "passed",
+    "ci_run": 41621063034,
+    "source": "d486741e5d50f6ebaa89330a149397e25c7d5536",
+    "release_tag": "android-v0.9.2-full",
+    "scope": [
+      "real AudioRecord manual finish after silence",
+      "recording cancellation and microphone reacquisition",
+      "assistant idle foreground service survives Home",
+      "Camera2 and YOLO regression",
+      "263 unit tests and lint",
+      "UNO compilation",
+      "existing native local-model regressions"
+    ],
+    "physical_hm10_or_wireless_earbuds_tested": false
+  },
   "not_verified": [
     "physical HM-10 and user wiring",
     "physical wireless earbud input/output route",
     "real phone calls and GPS service results"
-  ]
+  ],
+  "published_apk": {
+    "version": "0.9.2-full",
+    "version_code": 18,
+    "name": "giljabi-0.9.2-full-debug.apk",
+    "bytes": 1828252997,
+    "sha256": "3ae9295687838b0ea3b93ad834ef1dddb68bb92314d2f3c84c87cd1474e8f476",
+    "apk_v2_verified": true,
+    "certificate_sha256": "96a89367ae354e8905fb228bb12efc12f7339564fbe2f8168b322c3db4e9eb44",
+    "same_certificate_as_0_9_1": false,
+    "zipalign_16k": true,
+    "models": {
+      "model.gguf": {
+        "bytes": 672003680,
+        "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d"
+      },
+      "mmproj.gguf": {
+        "bytes": 1110117984,
+        "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900"
+      }
+    },
+    "new_manual_button_state_present": true,
+    "automatic_voice_gate_absent": true,
+    "fixed_elevenlabs_voices_preserved": true,
+    "credential_pattern_check_passed": true,
+    "checks": {
+      "tests": 263,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "lint_errors": 0
+    }
+  },
+  "native_checks": {
+    "template_failure_reproduced": true,
+    "complete_turn_rendering_passed": true,
+    "jni_exception_guard_passed": true
+  },
+  "guidance_checks": {
+    "host_only": true,
+    "physical_phone_latency_verified": false,
+    "production_jni_used": true,
+    "shared_walking_prompt_parser_used": true,
+    "guidance_protocol_passed": true,
+    "fixture": "public engine landscape 1.jpg",
+    "scenery_alert_suppressed": true,
+    "guidance_reply": "{\"speak\":true,\"message\":\"A rocky outcrop in the foreground blocks the view of the valley.\",\"urgency\":\"notice\"}",
+    "english_caption": "A rugged mountain viewpoint frames a winding river and steep valleys, with snow-dusted peaks under a bright sky.",
+    "host_phase_seconds": "prepare=1.422 image=12.524 generation=0.729",
+    "host_caption_seconds": "11.986"
+  }
 }

@@ -1,6 +1,8 @@
 # 길잡이 Android · ESP 실시간 YOLO + 로컬 VLM
 
-최신 **0.9.1-full**은 앱 상단에서 **로컬 AI / Gemini**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, Gemini는 개인 API 키를 앱에 설정해 사용합니다. [두 모드 사용 안내](AI_MODES.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+최신 **0.9.2-full**은 앱 상단에서 **로컬 AI / Gemini**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, Gemini는 개인 API 키를 앱에 설정해 사용합니다. [두 모드 사용 안내](AI_MODES.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+
+**0.9.2**의 음성비서는 **버튼 한 번으로 녹음 시작 → 다시 눌러 전송**합니다. 답변 중 버튼은 답변을 끊고 새 녹음을 시작합니다. 말소리로 자동 중단하거나 무음으로 자동 전송하지 않습니다. [버튼 사용법](ASSISTANT.md) · [검증 기록](BUTTON_TURNS_VALIDATION.json).
 
 **0.9.1**은 AI·비서·화면 수명과 별도로 BLE 연결을 유지하고 TEST를 실제 연결 중인 보드로 보냅니다. [연결 사용법·검증 범위](BLE_CONNECTION.md).
 
