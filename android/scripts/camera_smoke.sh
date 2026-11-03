@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 # This test build has no cloud key or GGUF; all camera frames stay inside the emulator.
-./gradlew --no-daemon -PcameraSmokeOnly=true :app:connectedDebugAndroidTest :app:testDebugUnitTest :app:lintDebug 2>&1 | tee camera-smoke.log
+# The separate phone-system job supplies a second AVD for PhoneSystemSmokeTest.
+./gradlew --no-daemon -PcameraSmokeOnly=true -Pandroid.testInstrumentationRunnerArguments.notClass=dev.giljabi.PhoneSystemSmokeTest :app:connectedDebugAndroidTest :app:testDebugUnitTest :app:lintDebug 2>&1 | tee camera-smoke.log
 status=${PIPESTATUS[0]}
 if (( status != 0 )); then
   python3 - <<'PY'
