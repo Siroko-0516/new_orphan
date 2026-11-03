@@ -64,6 +64,7 @@ public class LocationUiSmokeTest {
             assertTrue(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(new File(folder,"location-system-screen.png")));
             JSONObject result=new JSONObject().put("android_api",Build.VERSION.SDK_INT).put("actual_android_location_api",true).put("actual_app_location_button",true).put("actual_assistant_service",true).put("coordinates_visible_in_activity",true).put("first_map_url",first).put("updated_map_url",AssistantService.snapshot().mapUrl).put("updated_location_text",AssistantService.snapshot().locationText).put("new_fix_replaces_previous_fix",true).put("fixture_latitude",37.5005).put("fixture_longitude",127.0005).put("mock_gps_injected",true).put("physical_gps_reception_verified",false).put("ai_key_required",false).put("wifi_and_mobile_data_disabled_for_test",true).put("live_address_lookup_verified",false);
             try(FileOutputStream output=new FileOutputStream(new File(folder,"location-system-check.json"))){output.write((result.toString(2)+"\n").getBytes(StandardCharsets.UTF_8));}
+            SystemEvidence.preserve(new File(folder,"location-system-check.json"));SystemEvidence.preserve(new File(folder,"location-system-screen.png"));
         }finally{
             InstrumentationRegistry.getInstrumentation().runOnMainSync(()->AssistantService.stop(context()));
             try{manager.removeTestProvider(LocationManager.GPS_PROVIDER);}catch(RuntimeException ignored){}

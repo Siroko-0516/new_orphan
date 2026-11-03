@@ -6,6 +6,7 @@ on:
       - .github/workflows/android-location-check.yml
       - android/app/src/androidTest/java/dev/giljabi/LocationSmokeTest.java
       - android/app/src/androidTest/java/dev/giljabi/LocationUiSmokeTest.java
+      - android/app/src/androidTest/java/dev/giljabi/SystemEvidence.java
       - android/scripts/location_system_smoke.sh
   workflow_dispatch:
 permissions:

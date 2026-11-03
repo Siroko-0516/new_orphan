@@ -5,7 +5,7 @@ status=${PIPESTATUS[0]}
 mkdir -p location-system-validation
 if (( status == 0 )); then
   for item in location-system-check.json location-system-screen.png; do
-    if ! adb exec-out run-as dev.giljabi.camera cat "files/location-system/$item" > "location-system-validation/$item"; then status=1; fi
+    if ! adb exec-out cat "/data/local/tmp/giljabi-$item" > "location-system-validation/$item" || [[ ! -s "location-system-validation/$item" ]]; then status=1; fi
   done
 fi
 if (( status != 0 )); then

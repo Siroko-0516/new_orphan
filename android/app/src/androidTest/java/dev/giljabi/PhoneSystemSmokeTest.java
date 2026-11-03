@@ -79,6 +79,7 @@ public class PhoneSystemSmokeTest {
             device.dumpWindowHierarchy(new File(folder,"phone-system-window.xml"));
             JSONObject report=new JSONObject().put("android_api",Build.VERSION.SDK_INT).put("hardware",Build.HARDWARE).put("test_contact_lookup",true).put("production_phone_gateway",true).put("telecom_mocked",false).put("system_call_present",true).put("system_dialer_visible",true).put("dialer_package",dialer).put("virtual_peer_number",NUMBER).put("real_mobile_network_used",false).put("real_recipient_connection_verified",false).put("voice_recognition_or_spoken_confirmation_tested_here",false);
             try(FileOutputStream output=new FileOutputStream(new File(folder,"phone-system-check.json"))){output.write((report.toString(2)+"\n").getBytes(StandardCharsets.UTF_8));}
+            for(String item:new String[]{"phone-system-check.json","phone-system-screen.png","phone-system-window.xml"})SystemEvidence.preserve(new File(folder,item));
         }finally{
             endCall(telecom);
             if(contact!=null){automation.adoptShellPermissionIdentity(Manifest.permission.WRITE_CONTACTS);try{context.getContentResolver().delete(contact,null,null);}finally{automation.dropShellPermissionIdentity();}}

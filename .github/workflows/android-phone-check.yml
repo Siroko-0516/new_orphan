@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/android-phone-check.yml
       - android/app/src/androidTest/java/dev/giljabi/PhoneSystemSmokeTest.java
+      - android/app/src/androidTest/java/dev/giljabi/SystemEvidence.java
       - android/scripts/phone_system_smoke.sh
   workflow_dispatch:
 permissions:
