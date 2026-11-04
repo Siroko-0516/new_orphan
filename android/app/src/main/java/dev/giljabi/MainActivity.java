@@ -163,9 +163,9 @@ public final class MainActivity extends Activity {
         text(root,"처음 시작할 때 마이크·위치·연락처·전화 권한을 요청합니다. 위치·전화 권한은 해당 기능에만 사용하고, 거절한 기능은 실행하지 않습니다.",13);
         text(root,"음성비서 AI 선택",14);
         assistantProvider=new Spinner(this);assistantProvider.setContentDescription("음성비서 AI 선택");assistantProvider.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Gemini 음성비서","GPT 음성비서 · OpenAI API"}));assistantProvider.setSelection(AiProvider.OPENAI.equals(AiProvider.assistant(this))?1:0);root.addView(assistantProvider);controls.add(assistantProvider);
-        text(root,"사진·보행 AI와 음성비서 AI는 따로 선택합니다. 전화·현재 위치·주변 검색은 두 음성비서 모두 같은 휴대폰 기능으로 처리합니다.",13);
+        text(root,"사진·보행 AI와 음성비서 AI는 따로 선택합니다. 현재 위치와 주변 장소 이름·거리는 음성으로 안내합니다. 전화는 누구에게 걸지 묻고, 대상 이름을 읽어 다시 확인한 뒤 긍정 답변일 때만 발신합니다.",13);
         assistantProvider.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> parent){}public void onItemSelected(AdapterView<?> parent,View view,int position,long id){settings.edit().putString("assistant_provider",position==1?AiProvider.OPENAI:AiProvider.GEMINI).apply();}});
-        text(root,"물리 버튼이나 앱 버튼을 한 번 누르면 녹음 시작, 말을 마치고 다시 누르면 Gemini로 전송합니다. 답변 중 누르면 답변을 끊고 새 녹음을 시작합니다. 주변 검색 시 좌표를 공개 지도 서비스로 전송하며, 연락처 번호는 휴대폰에서만 확인합니다.",13);
+        text(root,"물리 버튼이나 앱 버튼을 한 번 누르면 녹음 시작, 말을 마치고 다시 누르면 선택한 AI로 전송합니다. 답변 중 누르면 답변을 끊고 새 녹음을 시작합니다. 주소·주변 장소 조회 시 좌표를 공개 지도 서비스로 전송하며, 연락처 번호는 휴대폰에서만 확인합니다.",13);
         assistantStatus=text(root,"음성비서 꺼짐",15);assistantRoute=text(root,"",13);assistantHeard=text(root,"",14);assistantAnswer=text(root,"",16);
         assistantLocationText=text(root,"",13);
         assistantStart=button(root,"음성비서 시작 · 선택한 HM-10 연결",v->startAssistant());

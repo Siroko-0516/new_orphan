@@ -14,7 +14,7 @@ final class NearbyPlaces {
     static String query(String category,double lat,double lon)throws IOException{
         if(!Double.isFinite(lat)||!Double.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)throw new IOException("현재 위치를 확인하지 못했습니다.");
         String selector;
-        switch(category){case "병원":selector="[\"amenity\"~\"^(hospital|clinic)$\"]";break;case "약국":selector="[\"amenity\"=\"pharmacy\"]";break;case "화장실":selector="[\"amenity\"=\"toilets\"]";break;case "편의점":selector="[\"shop\"=\"convenience\"]";break;case "카페":selector="[\"amenity\"=\"cafe\"]";break;case "음식점":selector="[\"amenity\"=\"restaurant\"]";break;default:throw new IOException("지원하는 장소 종류를 확인하세요.");}
+        switch(category){case "병원":return "[out:json][timeout:10];(nwr(around:3000,"+lat+","+lon+")[\"amenity\"~\"^(hospital|clinic|doctors)$\"];nwr(around:3000,"+lat+","+lon+")[\"healthcare\"~\"^(hospital|clinic|doctor)$\"];);out center tags;";case "약국":selector="[\"amenity\"=\"pharmacy\"]";break;case "화장실":selector="[\"amenity\"=\"toilets\"]";break;case "편의점":selector="[\"shop\"=\"convenience\"]";break;case "카페":selector="[\"amenity\"=\"cafe\"]";break;case "음식점":selector="[\"amenity\"=\"restaurant\"]";break;default:throw new IOException("지원하는 장소 종류를 확인하세요.");}
         return "[out:json][timeout:15];nwr(around:3000,"+lat+","+lon+")"+selector+";out center tags;";
     }
     static List<Place> parse(String body,double lat,double lon)throws IOException{
@@ -38,9 +38,9 @@ final class NearbyPlaces {
     static double distance(double a,double b,double c,double d){double p=Math.toRadians(c-a),q=Math.toRadians(d-b),h=Math.sin(p/2)*Math.sin(p/2)+Math.cos(Math.toRadians(a))*Math.cos(Math.toRadians(c))*Math.sin(q/2)*Math.sin(q/2);return 6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));}
     static String searchUrl(String category,double lat,double lon)throws IOException{query(category,lat,lon);return "https://www.google.com/maps/search/?api=1&query="+java.net.URLEncoder.encode(category+" near "+lat+","+lon,"UTF-8");}
     static String spoken(String category,List<Place> places){
-        if(places.isEmpty())return "지도 데이터에서 이름이 있는 주변 "+category+" 검색 결과를 찾지 못했어요. 주변에 없다는 뜻은 아니에요. 앱에서 지도 검색을 열어 확인할 수 있어요.";
+        if(places.isEmpty())return "주변 "+category+" 정보를 확인하지 못했어요. 주변에 없다는 뜻은 아니에요. 잠시 뒤 버튼을 눌러 다시 찾아달라고 말씀해주세요.";
         StringBuilder b=new StringBuilder("주변 "+category+" 검색 결과예요. ");
-        for(int i=0;i<Math.min(2,places.size());i++){Place p=places.get(i);b.append(i+1).append("번, ").append(p.name).append(", 직선거리 약 ").append(p.distance<1000?Math.max(10,Math.round(p.distance/10)*10)+"미터":String.format(Locale.KOREAN,"%.1f킬로미터",p.distance/1000)).append(". ");}
+        for(int i=0;i<Math.min(2,places.size());i++){Place p=places.get(i);String entry=(i+1)+"번, "+p.name+", 직선거리 약 "+(p.distance<1000?Math.max(10,Math.round(p.distance/10)*10)+"미터":String.format(Locale.KOREAN,"%.1f킬로미터",p.distance/1000))+". ";if(i>0&&b.length()+entry.length()>230)break;b.append(entry);}
         b.append("길을 따라 이동하는 거리와는 달라요.");return b.toString();
     }
 }

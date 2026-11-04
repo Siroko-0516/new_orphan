@@ -14,7 +14,8 @@ final class AssistantCommands {
         String t=compact(speech);
         if(t.isEmpty())return new Command(Kind.CANCEL,"");
         if(t.matches(".*(?:취소|하지마|걸지마|그만|멈춰|아니야|아니요|하지말).*"))return new Command(Kind.CANCEL,"");
-        if(awaitingConfirmation&&Arrays.asList("네","넵","예","응","어","맞아","맞아요","확인","전화해","전화해줘","걸어줘","연결해줘","해주세요").contains(t))return new Command(Kind.CONFIRM,"");
+        if(awaitingConfirmation&&t.matches("(?:아니|안해|안할|안돼|괜찮아|됐어|필요없|연결하지마|연결안|전화안|안걸).*"))return new Command(Kind.CANCEL,"");
+        if(awaitingConfirmation&&(Arrays.asList("네","넵","예","응","그래","맞아","맞아요","확인","좋아","전화해","전화해줘","걸어줘","연결해줘","해주세요").contains(t)||t.matches("(?:네|예|응|그래|좋아)(?:전화|통화|연결)?(?:해줘|걸어줘|해주세요|걸어주세요)")))return new Command(Kind.CONFIRM,"");
         if(t.matches("(?:지도|검색결과|병원지도)(?:를)?(?:열어|보여)(?:줘|주세요)?"))return new Command(Kind.MAP,"");
         if(!t.contains("전화번호")&&t.matches(".+?(?:전화|통화)(?:를)?(?:좀)?(?:걸어|해|연결해)(?:줘|주세요|주세요요)?")){
             int at=t.indexOf("전화");if(at<0)at=t.indexOf("통화");
@@ -28,6 +29,10 @@ final class AssistantCommands {
         }
         if(t.matches(".*(?:현재위치|현재주소|내위치|나의위치|여기어디|여기가어디|여기어딘|여기가어딘|지금어디|지금여기가|내가어디|나어디|내가있는곳|내가있는위치|위치조회|위치확인).*"))return new Command(Kind.LOCATION,"");
         return new Command(Kind.CHAT,speech==null?"":speech.trim());
+    }
+    static String callTarget(String speech){
+        String value=speech==null?"":speech.replaceAll("[\\p{Cntrl}\\s]+"," ").trim().replaceFirst("(?:에게|한테|께)(?:요)?$","").trim().replaceFirst("(?:이요|요)$","").trim();
+        return value.length()>0&&value.length()<=60?value:"";
     }
     static String phone(String input){
         if(input==null||input.matches(".*[^0-9+() .-].*"))return "";

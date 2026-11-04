@@ -1,9 +1,11 @@
 package dev.giljabi;
 
-/** A one-use confirmation is valid only after its own spoken prompt actually started. */
+/** One-use consent is accepted only after the complete target-specific question was played. */
 final class AssistantCallGuard {
-    private final long expires;private boolean audible,consumed;
-    AssistantCallGuard(long now){expires=now+30000;}
-    void playbackStarted(){if(!consumed)audible=true;}
-    boolean confirm(long now){boolean accepted=!consumed&&audible&&now>=expires-30000&&now<=expires;consumed=true;return accepted;}
+    private final long created;private long readyAt=-1,expires;private boolean started,consumed;
+    AssistantCallGuard(long now){created=now;}
+    void playbackStarted(){if(!consumed)started=true;}
+    void playbackCompleted(long now){if(started&&!consumed&&now>=created&&now-created<=120000){readyAt=now;expires=Math.min(created+120000,now+60000);}}
+    boolean ready(long now){return !consumed&&readyAt>=0&&now>=readyAt&&now<=expires;}
+    boolean confirm(long now){boolean accepted=ready(now);consumed=true;return accepted;}
 }

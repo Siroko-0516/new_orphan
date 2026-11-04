@@ -1,6 +1,8 @@
 # 길잡이 Android · ESP 실시간 YOLO + 로컬 VLM
 
-최신 **0.9.3-full**은 앱 상단에서 **로컬 AI / Gemini / GPT**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, 클라우드는 선택한 서비스의 개인 API 키를 앱에 설정해 사용합니다. [현재 위치·전화·지도·GPT 사용법](PHONE_LOCATION_GPT.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+최신 **0.9.4-full**은 현재 위치·주변 병원과 전화 확인을 음성으로 안내합니다. 앱 상단에서 **로컬 AI / Gemini / GPT**를 고릅니다. 로컬 모델 두 파일이 APK에 들어 있고, 클라우드는 선택한 서비스의 개인 API 키를 앱에 설정해 사용합니다. [음성비서 사용법](VOICE_FIRST_ASSISTANT.md) · [자동·백그라운드 실행](BACKGROUND.md) · [모델 내장 빌드](MODEL_BUNDLE.md) · [다운로드](../downloads/README.md).
+
+**0.9.4**는 위치 주소와 병원 이름·거리를 읽고, “전화해줘”에는 대상을 물은 뒤 이름을 읽어 재확인합니다. 확인 질문이 재생된 뒤 긍정 답변일 때만 발신하고 부정에는 취소를 음성으로 알립니다. [검증 기록](VOICE_FIRST_VALIDATION.json).
 
 **0.9.3**은 현재 위치를 실제 휴대폰 조회로 연결하고, 지도 검색 실패 시 실제 좌표의 지도 검색을 준비합니다. 전화 확인·시스템 발신 경로를 검사하고 GPT 사진·음성비서를 추가했습니다. [검증 기록](PHONE_LOCATION_GPT_VALIDATION.json).
 

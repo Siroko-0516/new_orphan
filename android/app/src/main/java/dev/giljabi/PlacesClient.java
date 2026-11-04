@@ -12,7 +12,8 @@ final class PlacesClient {
     static final String ENDPOINT="https://overpass-api.de/api/interpreter";
     static final String BACKUP="https://overpass.private.coffee/api/interpreter";
     private static final ScheduledExecutorService DEADLINES=Executors.newSingleThreadScheduledExecutor(r->{Thread t=new Thread(r,"places-deadline");t.setDaemon(true);return t;});
-    private static final class HttpError extends IOException {final int code;HttpError(int code){super("지도 검색 서버 오류 (HTTP "+code+")");this.code=code;}}
+    static final class HttpError extends IOException {final int code;HttpError(int code){super("장소 검색 서버 오류 (HTTP "+code+")");this.code=code;}}
+    static boolean canUseFallback(IOException failure){return !(failure instanceof HttpError)||((HttpError)failure).code>=500;}
     static final class Request implements AutoCloseable {
         private volatile HttpURLConnection connection;private volatile InputStream input;
         private final GeminiClient.Connector connector;private final byte[] body;private final double lat,lon;private final BooleanSupplier cancelled;

@@ -1,6 +1,16 @@
 # 길잡이 테스트 APK
 
-## 최신 · 현재 위치·전화·지도 연결 / GPT 추가 · 0.9.3-full
+## 최신 · 위치·병원 음성 안내 / 확인 후 전화 · 0.9.4-full
+
+**[giljabi-0.9.4-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.4-full/giljabi-0.9.4-full-debug.apk)** · [릴리스](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.4-full)
+
+- 현재 위치는 확인한 주소를, 주변 병원은 조회된 이름과 대략 거리를 읽습니다. 실패와 재시도도 음성으로 안내합니다.
+- “전화해줘”에는 누구에게 걸지 묻고, 대상 이름을 읽어 다시 확인한 뒤 긍정 답변일 때만 발신을 요청합니다. 부정에는 취소했다고 읽어주고 발신하지 않습니다.
+- 질문 재생 전·중단·불명확한 답변·만료·권한 거절은 발신하지 않습니다. 기존 Gemini/GPT·로컬과 음성·BLE·카메라·UNO v5를 유지합니다.
+
+[음성비서 사용법](../android/VOICE_FIRST_ASSISTANT.md) · [검증 기록](../android/VOICE_FIRST_VALIDATION.json).
+
+## 이전 · 현재 위치·전화·지도 연결 / GPT 추가 · 0.9.3-full
 
 **[giljabi-0.9.3-full-debug.apk 다운로드](https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.3-full/giljabi-0.9.3-full-debug.apk)** · [릴리스·검사 결과](https://github.com/Siroko-0516/new_orphan/releases/tag/android-v0.9.3-full)
 

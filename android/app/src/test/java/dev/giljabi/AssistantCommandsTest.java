@@ -17,4 +17,6 @@ public class AssistantCommandsTest {
  @Test public void nearbySearchTakesPriorityOverLocationWords(){assertEquals(AssistantCommands.Kind.NEARBY,AssistantCommands.parse("내 위치 주변에 병원 있냐",false).kind);assertEquals(AssistantCommands.Kind.NEARBY,AssistantCommands.parse("병원 있냐",false).kind);}
  @Test public void locationNegationNeverQueriesGps(){assertEquals(AssistantCommands.Kind.CANCEL,AssistantCommands.parse("내 위치 조회하지마",false).kind);}
  @Test public void callWithoutANameExplainsActualCapability(){assertEquals(AssistantCommands.Kind.CALL_HELP,AssistantCommands.parse("전화해줘",false).kind);}
+ @Test public void conversationalRepliesApplyOnlyToPendingCall(){for(String s:new String[]{"네 전화해줘","응 걸어줘","그래","좋아 연결해줘"})assertEquals(s,AssistantCommands.Kind.CONFIRM,AssistantCommands.parse(s,true).kind);for(String s:new String[]{"아니","아니오","안해","안할래","괜찮아"})assertEquals(s,AssistantCommands.Kind.CANCEL,AssistantCommands.parse(s,true).kind);assertEquals(AssistantCommands.Kind.CHAT,AssistantCommands.parse("괜찮아",false).kind);}
+ @Test public void politeContactNamesAreUnderstood(){assertEquals("엄마",AssistantCommands.callTarget("엄마한테요"));assertEquals("아빠",AssistantCommands.callTarget("아빠요"));}
 }

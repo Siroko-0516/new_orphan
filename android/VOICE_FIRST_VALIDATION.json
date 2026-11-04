@@ -1,0 +1,52 @@
+{
+  "version": "0.9.4-full",
+  "version_code": 20,
+  "release_tag": "android-v0.9.4-full",
+  "local_unit_tests": {
+    "tests": 332,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint_errors": 0,
+  "android_test_apk_compiled": true,
+  "verified_in_unit_tests": [
+    "address text is sent to speech instead of directing the user to a map",
+    "hospital names and approximate distances are sent to speech",
+    "failed address and place queries explain failure and retry by voice",
+    "generic call request asks who, then asks again with the actual target name",
+    "full confirmation question completion and explicit affirmative reply are required",
+    "negative replies announce cancellation and do not dial",
+    "unheard, interrupted, ambiguous or expired confirmation does not dial",
+    "recognition errors discard previous call consent",
+    "contact and call permission refusals and permission revocation do not dial",
+    "final connection announcement can be cancelled before dialing",
+    "confirmation is single-use",
+    "Nominatim request and response contracts, location validation, body limit and cancellation",
+    "request limits do not trigger retries on another provider",
+    "uninstalled or network-only voices are not chosen as offline Korean voices"
+  ],
+  "phone_confirmation": {
+    "requires_complete_question_playback": true,
+    "requires_explicit_affirmative_reply": true,
+    "valid_for_ms_after_question_completed": 60000,
+    "negative_reply_is_spoken": true,
+    "maximum_confirmations_per_call": 1,
+    "audio_events_in_unit_tests": "scripted start/completion callbacks; actual Korean audio is not claimed"
+  },
+  "map_data": {
+    "address_sources": ["Android Geocoder", "Nominatim"],
+    "place_sources": ["Overpass", "Nominatim"],
+    "nominatim_max_requests_per_second_per_process": 1,
+    "external_queries": "user-triggered only",
+    "live_endpoint_response_verified": false,
+    "test_transport": "mock HTTP responses plus official API request documentation"
+  },
+  "ci_android15_and_full_apk": "pending release build",
+  "not_verified": [
+    "physical user GPS and real address/place service results",
+    "real SIM call connection and recipient delivery",
+    "actual Korean TTS or ElevenLabs playback through user earbuds",
+    "live OpenAI responses and per-account model permissions"
+  ]
+}
