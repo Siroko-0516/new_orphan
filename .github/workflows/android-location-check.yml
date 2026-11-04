@@ -23,10 +23,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Confirm location code matches the published 0.9.3 app
+      - name: Confirm location code matches the published 0.9.4 app
         run: |
-          git fetch --depth=1 origin tag android-v0.9.3-full
-          git diff --exit-code android-v0.9.3-full -- android/app/src/main android/app/build.gradle.kts
+          git fetch --depth=1 origin tag android-v0.9.4-full
+          git diff --exit-code android-v0.9.4-full -- android/app/src/main android/app/build.gradle.kts
       - name: Enable Android emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -43,7 +43,7 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot-save -no-metrics -gpu swiftshader_indirect
           working-directory: android
           script: bash scripts/location_system_smoke.sh
-      - name: Publish successful GPS UI evidence alongside 0.9.3
+      - name: Publish successful GPS UI evidence alongside 0.9.4
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -54,11 +54,11 @@ jobs:
           result=json.loads(file.read_text())
           result['ci_run']=os.environ['GITHUB_RUN_ID']
           result['test_source']=os.environ['GITHUB_SHA']
-          result['production_matches_release']='android-v0.9.3-full'
+          result['production_matches_release']='android-v0.9.4-full'
           result['test_build']='x86_64 lite; same Java app source, no bundled models'
           file.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
           PY
-          gh release upload android-v0.9.3-full android/location-system-validation/location-system-check.json android/location-system-validation/location-system-screen.png --clobber
+          gh release upload android-v0.9.4-full android/location-system-validation/location-system-check.json android/location-system-validation/location-system-screen.png --clobber
       - name: Upload location test reports
         if: always()
         uses: actions/upload-artifact@v4

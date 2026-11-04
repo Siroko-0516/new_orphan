@@ -22,10 +22,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Confirm production code matches the published 0.9.3 app
+      - name: Confirm production code matches the published 0.9.4 app
         run: |
-          git fetch --depth=1 origin tag android-v0.9.3-full
-          git diff --exit-code android-v0.9.3-full -- android/app/src/main android/app/build.gradle.kts
+          git fetch --depth=1 origin tag android-v0.9.4-full
+          git diff --exit-code android-v0.9.4-full -- android/app/src/main android/app/build.gradle.kts
       - name: Enable Android emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -55,7 +55,7 @@ jobs:
           with zipfile.ZipFile('android/phone-system-validation/phone-system-instrumentation.zip','w',zipfile.ZIP_DEFLATED) as output:
               for file in root.rglob('TEST-*.xml'): output.write(file,file.relative_to(root))
           PY
-          gh release upload android-v0.9.3-full android/phone-system-validation/phone-system-raw-check.json android/phone-system-validation/phone-system-screen.png android/phone-system-validation/phone-system-instrumentation.zip --clobber
+          gh release upload android-v0.9.4-full android/phone-system-validation/phone-system-raw-check.json android/phone-system-validation/phone-system-screen.png android/phone-system-validation/phone-system-instrumentation.zip --clobber
       - name: Summarize the actual system call test
         if: always()
         run: |
@@ -80,7 +80,7 @@ jobs:
               result.update(totals)
               result['ci_run']=os.environ['GITHUB_RUN_ID']
               result['test_source']=os.environ['GITHUB_SHA']
-              result['production_matches_release']='android-v0.9.3-full'
+              result['production_matches_release']='android-v0.9.4-full'
               result['test_build']='x86_64 lite; same Java app source, no bundled models'
               peer=Path('android/phone-system-validation/peer-gsm-check.txt')
               peer_state=peer.read_text() if peer.exists() else ''
@@ -110,8 +110,8 @@ jobs:
             android/phone-system-smoke.log
             android/app/build/outputs/androidTest-results/
           retention-days: 14
-      - name: Publish successful emulator evidence alongside 0.9.3
+      - name: Publish successful emulator evidence alongside 0.9.4
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload android-v0.9.3-full android/phone-system-validation/phone-system-check.json android/phone-system-validation/phone-system-screen.png --clobber
+          gh release upload android-v0.9.4-full android/phone-system-validation/phone-system-check.json android/phone-system-validation/phone-system-screen.png --clobber

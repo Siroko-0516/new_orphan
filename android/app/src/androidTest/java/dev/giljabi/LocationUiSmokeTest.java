@@ -30,7 +30,10 @@ public class LocationUiSmokeTest {
         try(InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(descriptor);ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] buffer=new byte[1024];for(int n;(n=input.read(buffer))!=-1;)out.write(buffer,0,n);return out.toString("UTF-8").trim();}
     }
     private void await(String message,BooleanSupplier predicate)throws Exception{
-        long end=SystemClock.elapsedRealtime()+12000;while(!predicate.getAsBoolean()&&SystemClock.elapsedRealtime()<end)SystemClock.sleep(50);assertTrue(message,predicate.getAsBoolean());
+        await(message,predicate,12000);
+    }
+    private void await(String message,BooleanSupplier predicate,long timeout)throws Exception{
+        long end=SystemClock.elapsedRealtime()+timeout;while(!predicate.getAsBoolean()&&SystemClock.elapsedRealtime()<end)SystemClock.sleep(50);assertTrue(message,predicate.getAsBoolean());
     }
     private TextView find(View view,String text,boolean exact){
         if(view instanceof TextView){String value=((TextView)view).getText().toString();if(exact?value.equals(text):value.contains(text))return (TextView)view;}
@@ -54,6 +57,14 @@ public class LocationUiSmokeTest {
             activity.onActivity(a->{TextView button=find(a.getWindow().getDecorView(),"현재 위치 확인 · AI 서버 없이 조회",true);assertNotNull(button);assertTrue(button.isEnabled());assertTrue(button.performClick());});
             await("Current-location button did not display coordinates",()->AssistantService.snapshot().locationText.contains("37.50000")&&AssistantService.snapshot().mapUrl.endsWith("37.5,127.0"));
             String first=AssistantService.snapshot().mapUrl;
+            // No live map endpoints: verify that a failed address lookup has a spoken
+            // explanation instead of asking a blind user to open the screen or a map.
+            await("Location request never prepared a voice answer",()->!AssistantService.snapshot().answer.isEmpty(),25000);
+            String spokenLocation=AssistantService.snapshot().answer;
+            assertTrue("Location answer must contain an address or explain lookup failure",spokenLocation.contains("현재 위치는 대략")||spokenLocation.contains("주소를 확인하지 못했어요"));
+            assertFalse("Location answer directs the user to a map",spokenLocation.contains("지도"));
+            assertFalse("Location answer directs the user to the screen",spokenLocation.contains("화면"));
+            assertFalse("Location request must not launch a map",AssistantService.snapshot().mapRequested);
             seed(manager,37.5005,127.0005);
             await("Updated GPS was not available",()->{Location l=manager.getLastKnownLocation(LocationManager.GPS_PROVIDER);return l!=null&&Math.abs(l.getLatitude()-37.5005)<.000001;});
             activity.onActivity(a->AssistantService.ask(a,"내 위치가 어디야"));
@@ -68,6 +79,7 @@ public class LocationUiSmokeTest {
             File folder=new File(context().getFilesDir(),"location-system");assertTrue(folder.isDirectory()||folder.mkdirs());
             assertTrue(UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(new File(folder,"location-system-screen.png")));
             JSONObject result=new JSONObject().put("android_api",Build.VERSION.SDK_INT).put("actual_android_location_api",true).put("actual_app_location_button",true).put("actual_assistant_service",true).put("coordinates_visible_in_activity",true).put("first_map_url",first).put("updated_map_url",AssistantService.snapshot().mapUrl).put("updated_location_text",AssistantService.snapshot().locationText).put("new_fix_replaces_previous_fix",true).put("fixture_latitude",37.5005).put("fixture_longitude",127.0005).put("mock_gps_injected",true).put("physical_gps_reception_verified",false).put("ai_key_required",false).put("wifi_and_mobile_data_disabled_for_test",true).put("live_address_lookup_verified",false);
+            result.put("voice_answer_prepared",true).put("voice_answer_text",spokenLocation).put("answer_does_not_require_screen_or_map",true).put("actual_korean_audio_verified",false);
             try(FileOutputStream output=new FileOutputStream(new File(folder,"location-system-check.json"))){output.write((result.toString(2)+"\n").getBytes(StandardCharsets.UTF_8));}
             SystemEvidence.preserve(new File(folder,"location-system-check.json"));SystemEvidence.preserve(new File(folder,"location-system-screen.png"));
         }finally{
