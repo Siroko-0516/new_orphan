@@ -31,22 +31,106 @@
     "requires_explicit_affirmative_reply": true,
     "valid_for_ms_after_question_completed": 60000,
     "negative_reply_is_spoken": true,
-    "maximum_confirmations_per_call": 1,
-    "audio_events_in_unit_tests": "scripted start/completion callbacks; actual Korean audio is not claimed"
+    "audio_events_in_unit_tests": "scripted start/completion callbacks; actual Korean audio is not claimed",
+    "successful_consent_uses_per_call": 1
   },
   "map_data": {
-    "address_sources": ["Android Geocoder", "Nominatim"],
-    "place_sources": ["Overpass", "Nominatim"],
+    "address_sources": [
+      "Android Geocoder",
+      "Nominatim"
+    ],
+    "place_sources": [
+      "Overpass",
+      "Nominatim"
+    ],
     "nominatim_max_requests_per_second_per_process": 1,
     "external_queries": "user-triggered only",
     "live_endpoint_response_verified": false,
     "test_transport": "mock HTTP responses plus official API request documentation"
   },
-  "ci_android15_and_full_apk": "pending release build",
+  "ci_android15_and_full_apk": {
+    "result": "passed",
+    "ci_run": 41777053290,
+    "source": "3acee89dca025cde91dafef1ff2ee69f9ea3f412",
+    "scope": [
+      "Android 15 microphone, location, foreground-service and Camera2/YOLO regressions",
+      "332 unit tests and lint",
+      "UNO firmware compilation",
+      "existing real local-model native checks",
+      "full bundled APK build"
+    ],
+    "actual_korean_audio_or_real_phone_call_verified": false
+  },
   "not_verified": [
     "physical user GPS and real address/place service results",
     "real SIM call connection and recipient delivery",
     "actual Korean TTS or ElevenLabs playback through user earbuds",
     "live OpenAI responses and per-account model permissions"
-  ]
+  ],
+  "published_apk": {
+    "version": "0.9.4-full",
+    "version_code": 20,
+    "name": "giljabi-0.9.4-full-debug.apk",
+    "bytes": 1828280205,
+    "sha256": "a06777226cc512c8dbeb4bc32b170505742eb0954e23077451e3f1f1389fcbe1",
+    "apk_v2_verified": true,
+    "certificate_sha256": "f13e77de1e83186b2916778b1981046230f8bcfb77d62358fb8fea1e8e3ae35c",
+    "same_certificate_as_0_9_3": false,
+    "zipalign_16k": true,
+    "models": {
+      "model.gguf": {
+        "bytes": 672003680,
+        "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d"
+      },
+      "mmproj.gguf": {
+        "bytes": 1110117984,
+        "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900"
+      }
+    },
+    "elf_16k_libraries": [
+      "libc++_shared.so",
+      "libggml-base.so",
+      "libggml-cpu-android_armv8.0_1.so",
+      "libggml-cpu-android_armv8.2_1.so",
+      "libggml-cpu-android_armv8.2_2.so",
+      "libggml-cpu-android_armv8.6_1.so",
+      "libggml-vulkan.so",
+      "libggml.so",
+      "libgiljabi_native.so",
+      "libllama-common.so",
+      "libllama.so",
+      "libmtmd.so",
+      "libonnxruntime.so",
+      "libonnxruntime4j_jni.so",
+      "libtranslate_jni.so"
+    ],
+    "voice_first_classes_present": true,
+    "fixed_elevenlabs_voices_preserved": true,
+    "credential_pattern_check_passed": true,
+    "checks": {
+      "tests": 332,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "lint_errors": 0
+    }
+  },
+  "native_checks": {
+    "template_failure_reproduced": true,
+    "complete_turn_rendering_passed": true,
+    "jni_exception_guard_passed": true
+  },
+  "guidance_checks": {
+    "host_only": true,
+    "physical_phone_latency_verified": false,
+    "production_jni_used": true,
+    "shared_walking_prompt_parser_used": true,
+    "guidance_protocol_passed": true,
+    "fixture": "public engine landscape 1.jpg",
+    "scenery_alert_suppressed": true,
+    "guidance_reply": "{\"speak\":true,\"message\":\"A rocky outcrop in the foreground blocks the view of the valley.\",\"urgency\":\"notice\"}",
+    "english_caption": "A rugged mountain viewpoint frames a deep, tree-shaded valley winding beneath a bright sky.",
+    "host_phase_seconds": "prepare=1.566 image=11.785 generation=0.717",
+    "host_caption_seconds": "11.156"
+  }
 }
