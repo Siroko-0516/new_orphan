@@ -1,0 +1,129 @@
+{
+  "release": "android-v0.9.4-full",
+  "date_utc": "2026-11-04",
+  "test_commit": "28f1e4ef749ba2532846b6f758e3c9928e480f63",
+  "production_source_matches_published_release": true,
+  "test_build": "x86_64 lite with unchanged production Java code; ARM64 bundled APK not installed in x86_64 AVD",
+  "unit_retest": {
+    "release": "android-v0.9.4-full",
+    "source_commit": "28f1e4e",
+    "scope": "voice-first request routing, confirmation decisions and map contracts; scripted speech callbacks and mocked HTTP",
+    "suites": [
+      {
+        "name": "dev.giljabi.AssistantActionsServiceTest",
+        "tests": 22,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.giljabi.AssistantCallGuardTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.giljabi.AssistantCommandsTest",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.giljabi.AssistantVoicesTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.giljabi.MapLookupClientTest",
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.giljabi.NearbyPlacesTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "totals": {
+      "tests": 68,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "android_phone": {
+    "run_url": "https://github.com/Siroko-0516/new_orphan/actions/runs/41782591351",
+    "evidence_url": "https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.4-full/phone-system-check.json",
+    "result": {
+      "android_api": 35,
+      "hardware": "ranchu",
+      "test_contact_lookup": true,
+      "production_phone_gateway": true,
+      "telecom_mocked": false,
+      "system_call_present": true,
+      "system_dialer_visible": true,
+      "dialer_package": "com.google.android.dialer",
+      "virtual_peer_number": "15555215556",
+      "real_mobile_network_used": false,
+      "real_recipient_connection_verified": false,
+      "voice_recognition_or_spoken_confirmation_tested_here": false,
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "ci_run": "41782591351",
+      "test_source": "28f1e4ef749ba2532846b6f758e3c9928e480f63",
+      "production_matches_release": "android-v0.9.4-full",
+      "test_build": "x86_64 lite; same Java app source, no bundled models",
+      "virtual_peer_received_call": false,
+      "virtual_peer_state": ""
+    }
+  },
+  "android_location": {
+    "run_url": "https://github.com/Siroko-0516/new_orphan/actions/runs/41782591382",
+    "evidence_url": "https://github.com/Siroko-0516/new_orphan/releases/download/android-v0.9.4-full/location-system-check.json",
+    "result": {
+      "android_api": 35,
+      "actual_android_location_api": true,
+      "actual_app_location_button": true,
+      "actual_assistant_service": true,
+      "coordinates_visible_in_activity": true,
+      "first_map_url": "https://www.google.com/maps/search/?api=1&query=37.5,127.0",
+      "updated_map_url": "https://www.google.com/maps/search/?api=1&query=37.5005,127.0005",
+      "updated_location_text": "확인한 위치: 37.50050, 127.00050 · 추정 정확도 5미터 · 확인 시각 06:04:10",
+      "new_fix_replaces_previous_fix": true,
+      "fixture_latitude": 37.5005,
+      "fixture_longitude": 127.0005,
+      "mock_gps_injected": true,
+      "physical_gps_reception_verified": false,
+      "ai_key_required": false,
+      "wifi_and_mobile_data_disabled_for_test": true,
+      "live_address_lookup_verified": false,
+      "voice_answer_prepared": true,
+      "voice_answer_text": "위치 좌표는 받았지만 현재 주소를 확인하지 못했어요. 잠시 뒤 버튼을 눌러 내 위치를 다시 알려달라고 말씀해주세요.",
+      "answer_does_not_require_screen_or_map": true,
+      "actual_korean_audio_verified": false,
+      "ci_run": "41782591382",
+      "test_source": "28f1e4ef749ba2532846b6f758e3c9928e480f63",
+      "production_matches_release": "android-v0.9.4-full",
+      "test_build": "x86_64 lite; same Java app source, no bundled models"
+    }
+  },
+  "scope_limits": [
+    "Call target and affirmative/negative voice dialogue uses scripted playback callbacks in unit tests.",
+    "The emulator phone test invokes the production call gateway directly, not a complete microphone-to-call dialogue.",
+    "The emulator GPS fix is injected; physical satellite reception is not verified.",
+    "Internet is disabled for the location test; a voice answer explaining address lookup failure is verified, not a live address response.",
+    "Live hospital/map API responses are not verified; configured worker network policy does not allow those destinations.",
+    "Actual Korean TTS/ElevenLabs audio through earbuds and real SIM/recipient connection remain unverified.",
+    "The peer emulator did not report incoming delivery; this report does not claim it did."
+  ]
+}

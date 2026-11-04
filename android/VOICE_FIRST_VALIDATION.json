@@ -132,5 +132,25 @@
     "english_caption": "A rugged mountain viewpoint frames a deep, tree-shaded valley winding beneath a bright sky.",
     "host_phase_seconds": "prepare=1.566 image=11.785 generation=0.717",
     "host_caption_seconds": "11.156"
+  },
+  "additional_android_system_retest": {
+    "result": "passed",
+    "date_utc": "2026-11-04",
+    "test_source": "28f1e4ef749ba2532846b6f758e3c9928e480f63",
+    "unit_tests": {
+      "tests": 68,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone_ci_run": 41782591351,
+    "location_ci_run": 41782591382,
+    "real_android_contacts_telecom_and_dialer": true,
+    "injected_gps_reception_and_refresh": true,
+    "offline_location_failure_answer_prepared": true,
+    "actual_korean_audio_verified": false,
+    "physical_gps_or_real_sim_verified": false,
+    "full_microphone_to_confirmed_call_verified": false,
+    "details": "VOICE_FIRST_SYSTEM_VALIDATION.json"
   }
 }
