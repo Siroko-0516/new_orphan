@@ -19,6 +19,12 @@ def main():
     output.mkdir()
     for name in FILES:
         shutil.copy2(ROOT / name, output / name)
+    document = (output / 'index.html').read_text()
+    marker = '<!--SYSTEM_DIAGRAM-->'
+    if marker not in document:
+        raise SystemExit('Missing system diagram insertion point')
+    diagram = (ROOT / 'assets/cane-system.svg').read_text().replace('<svg ', '<svg aria-hidden="true" ', 1)
+    (output / 'index.html').write_text(document.replace(marker, diagram))
     shutil.copytree(ROOT / 'assets', output / 'assets')
     files = [p for p in output.rglob('*') if p.is_file()]
     for file in files:

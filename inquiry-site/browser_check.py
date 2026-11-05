@@ -72,6 +72,17 @@ async def main():
                 page = await context.new_page()
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 await page.goto(base, wait_until='networkidle')
+                await page.evaluate('document.fonts.ready')
+                assert await page.evaluate('document.fonts.check(\'700 32px "Giljabi Site Sans"\', "길잡이")'), 'Bundled Korean font did not load'
+                session = await context.new_cdp_session(page)
+                await session.send('DOM.enable')
+                await session.send('CSS.enable')
+                document = await session.send('DOM.getDocument')
+                for selector in ['#hero-title', '.system-illustration svg text']:
+                    node = await session.send('DOM.querySelector', {'nodeId': document['root']['nodeId'], 'selector': selector})
+                    fonts = await session.send('CSS.getPlatformFontsForNode', {'nodeId': node['nodeId']})
+                    assert any(f['isCustomFont'] and f['glyphCount'] > 0 for f in fonts['fonts']), (selector, fonts)
+                await session.detach()
                 assert await page.title() == '길잡이 · 프로젝트 소개와 문의'
                 assert await page.locator('h1').count() == 1
                 assert await page.locator('main').count() == 1
@@ -170,7 +181,7 @@ async def main():
     decode(ROOT / 'assets/poster-qr.png', GUIDE)
     assert not external, external
     assert not errors, errors
-    report.update({'passed': True, 'layouts': layouts, 'page_errors': errors, 'unexpected_external_requests': external, 'cloudflare_headers_applied_locally': True})
+    report.update({'passed': True, 'layouts': layouts, 'page_errors': errors, 'unexpected_external_requests': external, 'cloudflare_headers_applied_locally': True, 'bundled_korean_font_loaded_and_used': True, 'diagram_uses_bundled_korean_font': True})
     (OUTPUT / 'browser-checks.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(json.dumps(report, ensure_ascii=False))
 

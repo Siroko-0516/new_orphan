@@ -62,16 +62,17 @@ Android 0.9.4 자동 검사 332개와 Android 15 가상 기기의 GPS 위치 갱
 - 프로젝트에 관한 질문, 설치·사용 문제, 기능 제안을 남길 수 있습니다.
 - 오류 문의에는 앱 버전·기기 종류·오류 문구를 함께 적어주세요.
 - GitHub 계정이 필요하며, 작성한 내용은 공개됩니다. API 키·전화번호·개인 주소는 제외해주세요.
-- 응답 시간이나 별도의 전화·이메일 상담은 약속하지 않습니다.
 
 ---
 
 ## 포스터용 사이트 파일과 QR
 
-별도 디자인 사이트의 [Cloudflare 업로드 ZIP과 QR 다운로드](https://github.com/Siroko-0516/new_orphan/releases/tag/inquiry-v1.0.0)를 제공합니다. 공개 Cloudflare 주소는 계정에서 배포를 완료하면 발급됩니다. 발급 전의 주소를 만들어 안내하지 않습니다.
+별도 디자인 사이트의 [Cloudflare 업로드 ZIP과 QR 다운로드](https://github.com/Siroko-0516/new_orphan/releases/tag/inquiry-v1.0.1)를 제공합니다. 공개 Cloudflare 주소는 계정에서 배포를 완료하면 발급됩니다.
 
 같이 제공하는 QR은 **현재 공개된 이 GitHub 안내 페이지**로 연결됩니다. 별도 사이트를 Cloudflare에 배포하면 사이트 아래에서 **그 사이트 주소의 QR**을 저장할 수 있습니다.
 
 포스터 문구: **“프로젝트 소개 및 자세한 문의는 QR 코드를 통해 확인해주세요.”**
 
 업로드 방법은 [UPLOAD.txt](UPLOAD.txt)를 확인하세요. 정적 사이트여서 API 키나 서버 설정이 필요하지 않습니다.
+
+한국어 UI 글꼴을 사이트에 포함하여 외부 폰트 서버에 연결하지 않습니다. Noto Sans CJK 기반 글꼴의 출처·변형과 SIL Open Font License는 [글꼴 안내](assets/fonts/provenance.json)와 [라이선스](assets/fonts/LICENSE.txt)에서 확인할 수 있습니다.

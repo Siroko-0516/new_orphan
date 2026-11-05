@@ -2,6 +2,8 @@
 
 포스터 QR을 통해 프로젝트 소개·연결 구조·사용 방법·앱 다운로드·FAQ와 문의 창구를 확인하는 별도 사이트입니다.
 
+1.0.1은 한국어 UI 글꼴과 구성도 글꼴을 자체 포함합니다. 한국어 글꼴이 없는 환경에서도 사이트 본문과 구성도가 표시되는지 브라우저에서 확인합니다. 글꼴의 SIL Open Font License와 출처도 포함합니다.
+
 - `giljabi-inquiry-site.zip`: Cloudflare Pages 직접 업로드 파일.
 - `giljabi-poster-qr.png` / `.svg`: 현재 공개 GitHub 프로젝트 안내 페이지로 연결하는 인쇄용 QR.
 - `Cloudflare-Pages-upload.txt`: 배포 방법과 QR 사용 안내.

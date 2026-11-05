@@ -1,5 +1,5 @@
 {
-  "release": "inquiry-v1.0.0",
+  "release": "inquiry-v1.0.1",
   "validated_at_seoul": "2026-11-05",
   "browser": {
     "site": "giljabi-inquiry-site",
@@ -58,7 +58,9 @@
     ],
     "page_errors": [],
     "unexpected_external_requests": [],
-    "cloudflare_headers_applied_locally": true
+    "cloudflare_headers_applied_locally": true,
+    "bundled_korean_font_loaded_and_used": true,
+    "diagram_uses_bundled_korean_font": true
   },
   "cloudflare_account_authenticated": false,
   "cloudflare_public_site_deployed": false,
@@ -71,5 +73,6 @@
   "preview_screenshots": [
     "site-desktop.png",
     "site-mobile.png"
-  ]
+  ],
+  "bundled_korean_fonts_ofl_included": true
 }

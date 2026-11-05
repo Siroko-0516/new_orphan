@@ -1,0 +1,26 @@
+{
+  "upstream": "https://github.com/notofonts/noto-cjk",
+  "license": "SIL Open Font License 1.1",
+  "tool": "fonttools[woff] 4.60.1",
+  "modifications": "Korean UI/ASCII glyph subset, WOFF2 conversion, family renamed Giljabi Site Sans",
+  "fonts": [
+    {
+      "weight": "regular",
+      "source_sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+      "source_version": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "file": "site-regular.woff2",
+      "bytes": 39380,
+      "sha256": "f88403ef076bdd132265804ab40dc60e4fe3b63c256bcad2de6e2f3bebf19f7c",
+      "all_site_korean_glyphs_present": true
+    },
+    {
+      "weight": "bold",
+      "source_sha256": "faa5f3656a78b2e2d450d27fe8382c778bc2b6bb5ea29c986664a6a435056ceb",
+      "source_version": "Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "file": "site-bold.woff2",
+      "bytes": 40044,
+      "sha256": "54b4e9a322a78de1f7d0c54409e083c00b453e017e4363ebc35fbf3c0be10ba8",
+      "all_site_korean_glyphs_present": true
+    }
+  ]
+}
