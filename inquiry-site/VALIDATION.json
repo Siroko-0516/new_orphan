@@ -74,5 +74,56 @@
     "site-desktop.png",
     "site-mobile.png"
   ],
-  "bundled_korean_fonts_ofl_included": true
+  "bundled_korean_fonts_ofl_included": true,
+  "public_release": {
+    "release": "inquiry-v1.0.1",
+    "ci_run": 41960317906,
+    "ci_result": "success",
+    "actual_public_files_downloaded": [
+      {
+        "name": "giljabi-inquiry-site.zip",
+        "bytes": 119074,
+        "http": 200
+      },
+      {
+        "name": "giljabi-inquiry-site.zip.sha256",
+        "bytes": 91,
+        "http": 200
+      },
+      {
+        "name": "giljabi-poster-qr.png",
+        "bytes": 10971,
+        "http": 200
+      },
+      {
+        "name": "giljabi-poster-qr.svg",
+        "bytes": 17988,
+        "http": 200
+      },
+      {
+        "name": "browser-checks.json",
+        "bytes": 1554,
+        "http": 200
+      },
+      {
+        "name": "checks.json",
+        "bytes": 275,
+        "http": 200
+      },
+      {
+        "name": "site-desktop.png",
+        "bytes": 462044,
+        "http": 200
+      },
+      {
+        "name": "site-mobile.png",
+        "bytes": 384731,
+        "http": 200
+      }
+    ],
+    "zip_sha256": "df4e5f79f8cf1658cbcbf9a94695a700a329f28266156cd9d3377c9add39b80a",
+    "zip_matches_tested_source": true,
+    "poster_qr_independently_decoded": "https://github.com/Siroko-0516/new_orphan/blob/main/inquiry-site/README.md",
+    "cloudflare_site_deployed": false
+  }
 }
