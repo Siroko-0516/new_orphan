@@ -1,5 +1,7 @@
 # 길잡이 · 필요한 변화만 안내하는 웹사이트
 
+**포스터를 보고 방문하셨나요? [길잡이 프로젝트 소개·사용 방법·문의](inquiry-site/README.md)에서 확인하세요.**
+
 휴대폰·PC 브라우저에서 카메라를 열고, 같은 상황은 반복해서 말하지 않는 보조 안내 웹 앱입니다. 기존 Android 앱은 [android/README.md](android/README.md)와 [APK 다운로드](downloads/README.md)에 그대로 있습니다.
 
 - 휴대폰 후면·전면 카메라, 저장한 사진 분석, 조건이 맞는 ESP 영상 입력.

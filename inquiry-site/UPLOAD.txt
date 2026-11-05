@@ -1,0 +1,25 @@
+길잡이 프로젝트 소개·문의 사이트
+
+Cloudflare Pages에 공개하기
+1. Cloudflare → Workers & Pages → Pages 프로젝트 만들기 → 직접 업로드를 선택합니다.
+2. giljabi-inquiry-site.zip을 업로드해 배포합니다. 기존 카메라 웹 앱과 구분하려면 새 Pages 프로젝트를 만드세요.
+3. 배포 완료 화면에서 실제로 발급된 HTTPS 주소를 엽니다.
+4. 페이지 아래의 '포스터에 이 페이지를 연결하세요'를 열고 QR PNG 또는 SVG를 저장합니다.
+5. 저장한 QR을 휴대폰으로 스캔해 같은 사이트가 열리는지 확인한 뒤 포스터에 넣습니다.
+
+API 키·서버·유료 AI 연결은 필요하지 않습니다.
+문의 버튼은 GitHub 문의 작성 화면을 엽니다. GitHub 로그인 후 최종 제출해야 등록됩니다.
+이 사이트가 자체적으로 메일이나 문의를 전송했다고 표시하지 않습니다.
+
+Git 연동으로 배포하는 경우
+저장소: Siroko-0516/new_orphan
+브랜치: main
+루트 디렉터리: inquiry-site
+빌드 명령: python3 build.py
+빌드 출력 디렉터리: dist
+
+배포 전에 바로 사용할 공개 안내 주소
+https://github.com/Siroko-0516/new_orphan/blob/main/inquiry-site/README.md
+
+함께 제공하는 giljabi-poster-qr.png / .svg는 이 공개 GitHub 안내 주소로 연결됩니다.
+Cloudflare 사이트 주소를 포스터에 쓰려면 배포한 사이트 안에서 새 QR을 저장하세요.

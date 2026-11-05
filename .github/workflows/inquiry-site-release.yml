@@ -1,0 +1,37 @@
+name: Project inquiry site and poster QR
+on:
+  push:
+    tags: ['inquiry-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inquiry-site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build standalone Cloudflare upload ZIP
+        run: python3 inquiry-site/build.py --release
+      - name: Install browser test tools
+        run: pip install playwright==1.56.0 pillow==11.3.0 zxing-cpp==2.3.0
+      - name: Verify mobile, inquiry draft and decodable poster QR
+        env:
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
+        run: python3 inquiry-site/browser_check.py
+      - name: Upload website and QR files
+        uses: actions/upload-artifact@v4
+        with:
+          name: giljabi-inquiry-site
+          path: release-inquiry/*
+          retention-days: 14
+      - name: Publish upload ZIP and print QR
+        if: startsWith(github.ref, 'refs/tags/inquiry-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release-inquiry/* --prerelease --title '길잡이 · 프로젝트 문의 사이트와 포스터 QR' --notes-file inquiry-site/RELEASE_NOTES.md

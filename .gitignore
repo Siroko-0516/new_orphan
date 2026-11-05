@@ -18,6 +18,8 @@ dist/
 public/ort/
 public/local-ort/
 release-web/
+inquiry-site/dist/
+release-inquiry/
 
 android/third_party/vulkan-headers/
 android/third_party/.vulkan-cache/

@@ -1,0 +1,75 @@
+{
+  "release": "inquiry-v1.0.0",
+  "validated_at_seoul": "2026-11-05",
+  "browser": {
+    "site": "giljabi-inquiry-site",
+    "real_inquiries_submitted": 0,
+    "paid_requests": 0,
+    "cloudflare_public_deployment_verified": false,
+    "inquiry_draft": {
+      "fields_preserved": true,
+      "required_fields_enforced": true,
+      "github_submission_required": true,
+      "korean_draft_under_8kb": true,
+      "real_network": false
+    },
+    "qr_exports": {
+      "local_fallback_to_public_guide": true,
+      "mock_https_uses_own_site_url": true,
+      "downloaded_png_independently_decoded": true,
+      "downloaded_svg_independently_decoded": true,
+      "decoder": "ZXing C++ 2.3.0",
+      "https_fixture_is_not_a_deployed_site": true
+    },
+    "without_javascript": {
+      "inquiry_draft_works": true,
+      "static_qr_available": true
+    },
+    "passed": true,
+    "layouts": [
+      {
+        "width": 1440,
+        "height": 1000,
+        "no_horizontal_overflow": true,
+        "images_loaded": true,
+        "keyboard_faq": true
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "no_horizontal_overflow": true,
+        "images_loaded": true,
+        "keyboard_faq": true
+      },
+      {
+        "width": 320,
+        "height": 740,
+        "no_horizontal_overflow": true,
+        "images_loaded": true,
+        "keyboard_faq": true
+      },
+      {
+        "width": 768,
+        "height": 1024,
+        "no_horizontal_overflow": true,
+        "images_loaded": true,
+        "keyboard_faq": true
+      }
+    ],
+    "page_errors": [],
+    "unexpected_external_requests": [],
+    "cloudflare_headers_applied_locally": true
+  },
+  "cloudflare_account_authenticated": false,
+  "cloudflare_public_site_deployed": false,
+  "public_contact": "https://github.com/Siroko-0516/new_orphan/issues",
+  "default_poster_qr": "https://github.com/Siroko-0516/new_orphan/blob/main/inquiry-site/README.md",
+  "private_email_published": false,
+  "api_keys_required": false,
+  "upload_zip_has_no_models_keys_or_backend": true,
+  "cloudflare_file_limit_passed": true,
+  "preview_screenshots": [
+    "site-desktop.png",
+    "site-mobile.png"
+  ]
+}
