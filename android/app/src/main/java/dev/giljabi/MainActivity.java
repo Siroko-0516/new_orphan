@@ -29,6 +29,8 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.*;
 import android.text.InputType;
+import android.text.TextWatcher;
+import android.text.Editable;
 import android.app.AlertDialog;
 import androidx.core.content.FileProvider;
 import java.io.*;
@@ -41,6 +43,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity {
+    private int promptLanguage;private Spinner espPreset;
     private static final int PICK_MODEL=10, PICK_VISION=11, PICK_PHOTO=12, TAKE_PHOTO=13, BLE_PERMISSIONS=20, ENABLE_BLUETOOTH=21,NOTIFICATION_PERMISSION=22,CAMERA_PERMISSION=23,ASSISTANT_PERMISSIONS=24,ASSISTANT_ACTION_PERMISSIONS=25;
     private final ExecutorService jobs=Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled=new AtomicBoolean();
@@ -126,9 +129,12 @@ public final class MainActivity extends Activity {
         elevenSettingsButton=button(root,"ElevenLabs API 키 · 고정 음성 설정",v->elevenSettings());
         text(root,"영상 입력 선택",18);
         cameraSource=new Spinner(this);cameraSource.setContentDescription("영상 입력 선택");cameraSource.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,CameraSource.LABELS));cameraSource.setSelection(Math.max(0,Math.min(2,settings.getInt("camera_source",CameraSource.ESP))));root.addView(cameraSource);controls.add(cameraSource);
-        ip=new EditText(this);ip.setSingleLine(true);ip.setText("http://192.168.4.1:81/stream");root.addView(ip);controls.add(ip);
+        ip=new EditText(this);ip.setSingleLine(true);ip.setText(settings.getString("camera_address","http://192.168.4.1:81/stream"));rememberText(ip,()->"camera_address");root.addView(ip);controls.add(ip);
+        espPreset=new Spinner(this);espPreset.setContentDescription("ESP 원본 영상 품질");espPreset.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"ESP 선명도 우선 · 지원 시 640×480","ESP 속도 우선 · 320×240","ESP 원본 설정 그대로"}));espPreset.setSelection(Math.max(0,Math.min(2,settings.getInt("esp_camera_preset",EspCameraProfile.CLEAR))));root.addView(espPreset);controls.add(espPreset);
+        espPreset.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> parent){}public void onItemSelected(AdapterView<?> parent,View view,int position,long id){if(!MonitorService.active()&&live==null)settings.edit().putInt("esp_camera_preset",position).apply();}});
         text(root,"보행 상황 분석 · 필요한 변화만 음성 안내",18);
-        autoInterval=new Spinner(this);autoInterval.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"상황 확인 최소 간격 1초","상황 확인 최소 간격 2초","상황 확인 최소 간격 3초","상황 확인 최소 간격 5초","상황 확인 최소 간격 10초"}));autoInterval.setSelection(1);root.addView(autoInterval);controls.add(autoInterval);
+        autoInterval=new Spinner(this);autoInterval.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"상황 확인 최소 간격 1초","상황 확인 최소 간격 2초","상황 확인 최소 간격 3초","상황 확인 최소 간격 5초","상황 확인 최소 간격 10초"}));autoInterval.setSelection(Math.max(0,Math.min(INTERVALS.length-1,settings.getInt("analysis_interval_index",0))));root.addView(autoInterval);controls.add(autoInterval);
+        autoInterval.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> parent){}public void onItemSelected(AdapterView<?> parent,View view,int position,long id){if(!applyingMonitorState&&!MonitorService.active())settings.edit().putInt("analysis_interval_index",position).apply();}});
         autoStart=button(root,"실시간 AI + 백그라운드 시작",v->startMonitor());
         autoStop=button(root,"실시간 / 백그라운드 중지",v->MonitorService.stop(this));
         autoRetry=button(root,"장면 설명 재시도",v->MonitorService.retry(this));
@@ -153,12 +159,12 @@ public final class MainActivity extends Activity {
         bleDisconnect=button(root,"BLE 연결 해제",v->BoardService.disconnect(this));
         bleTest=button(root,"아두이노 TEST 신호 보내기",v->{if(!BoardService.send("TEST\n"))bleStatus.setText("BLE 연결 상태를 확인한 뒤 TEST를 다시 눌러주세요.");});
         text(root,"AI나 음성비서를 중지해도 BLE 연결은 유지합니다. 끊으려면 앱 또는 보드 연결 알림의 BLE 연결 해제를 누르세요.",13);
-        notifyObjects=new CheckBox(this);notifyObjects.setText("AI의 새 보행 경고를 아두이노 서보 신호로 전송");root.addView(notifyObjects);
-        notifyObjects.setOnCheckedChangeListener((v,enabled)->tracker.reset());
+        notifyObjects=new CheckBox(this);notifyObjects.setText("새 보행 경고 시 보드 진동 · BLE 연결 필요");notifyObjects.setChecked(settings.getBoolean("walking_haptics",true));root.addView(notifyObjects);
+        notifyObjects.setOnCheckedChangeListener((v,enabled)->{tracker.reset();if(!applyingMonitorState)settings.edit().putBoolean("walking_haptics",enabled).apply();});
         LinearLayout advanced=new LinearLayout(this);advanced.setOrientation(LinearLayout.VERTICAL);advanced.setVisibility(View.GONE);
         button(root,"BLE UUID 설정 열기/닫기",v->advanced.setVisibility(advanced.getVisibility()==View.GONE?View.VISIBLE:View.GONE));root.addView(advanced);
-        serviceUuid=new EditText(this);serviceUuid.setSingleLine(true);serviceUuid.setHint("Service UUID");serviceUuid.setText(BleLink.DEFAULT_SERVICE);advanced.addView(serviceUuid);
-        characteristicUuid=new EditText(this);characteristicUuid.setSingleLine(true);characteristicUuid.setHint("Write characteristic UUID");characteristicUuid.setText(BleLink.DEFAULT_CHARACTERISTIC);advanced.addView(characteristicUuid);
+        serviceUuid=new EditText(this);serviceUuid.setSingleLine(true);serviceUuid.setHint("Service UUID");serviceUuid.setText(settings.getString("ble_service_uuid",BleLink.DEFAULT_SERVICE));rememberText(serviceUuid,()->"ble_service_uuid");advanced.addView(serviceUuid);
+        characteristicUuid=new EditText(this);characteristicUuid.setSingleLine(true);characteristicUuid.setHint("Write characteristic UUID");characteristicUuid.setText(settings.getString("ble_characteristic_uuid",BleLink.DEFAULT_CHARACTERISTIC));rememberText(characteristicUuid,()->"ble_characteristic_uuid");advanced.addView(characteristicUuid);
         text(root,"버튼 음성비서 · 전화 / 주변 장소 / 질문",19);
         text(root,"처음 시작할 때 마이크·위치·연락처·전화 권한을 요청합니다. 위치·전화 권한은 해당 기능에만 사용하고, 거절한 기능은 실행하지 않습니다.",13);
         text(root,"음성비서 AI 선택",14);
@@ -174,7 +180,7 @@ public final class MainActivity extends Activity {
         button(root,"위치·연락처·전화 권한 설정",v->requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.READ_CONTACTS,Manifest.permission.CALL_PHONE},ASSISTANT_ACTION_PERMISSIONS));
         assistantLocate=button(root,"현재 위치 확인 · AI 서버 없이 조회",v->AssistantService.ask(this,"내 위치 알려줘"));
         assistantMap=button(root,"확인한 위치 / 주변 장소 지도 열기",v->{String url=AssistantService.mapLink();if(!url.isEmpty())openAssistantMap(url);});
-        text(root,"이어폰 마이크를 우선 사용합니다. 녹음은 버튼으로 시작하고 전송하며, 조용해지거나 다시 말하는 것으로 끝내거나 답변을 끊지 않습니다. 답변 중에는 녹음하지 않습니다. 최대 60초 녹음 후에도 버튼을 눌러야 전송합니다. 질문·답변 중 일반 카메라 음성은 멈추고 AI 경고 서보 신호는 유지합니다.",13);
+        text(root,"이어폰 마이크를 우선 사용합니다. 녹음은 버튼으로 시작하고 전송하며, 조용해지거나 다시 말하는 것으로 끝내거나 답변을 끊지 않습니다. 답변 중에는 녹음하지 않습니다. 최대 60초 녹음 후에도 버튼을 눌러야 전송합니다. 질문·답변 중 일반 카메라 음성은 멈추고 AI 보행 경고 진동은 유지합니다.",13);
         assistantQuestion=new EditText(this);assistantQuestion.setHint("직접 질문 · 예: 주변 병원 있어? / 엄마에게 전화해줘");assistantQuestion.setSingleLine(true);root.addView(assistantQuestion);
         assistantAsk=button(root,"입력한 말 보내기",v->{String value=assistantQuestion.getText().toString().trim();if(!value.isEmpty()){AssistantService.ask(this,value);assistantQuestion.setText("");}});
         assistantPlaces=new LinearLayout(this);assistantPlaces.setOrientation(LinearLayout.VERTICAL);root.addView(assistantPlaces);
@@ -194,22 +200,22 @@ public final class MainActivity extends Activity {
         release=button(localPanel,"모델 메모리 해제",v->runJob(()->{unload();ui(()->setStatus("모델 메모리를 해제했습니다."));}));
         button(root,"사진 선택",v->pick(PICK_PHOTO,"image/*"));
         button(root,"카메라 촬영",v->takePhoto());
-        espPhoto=button(root,"ESP32 사진 한 장 받기",v->{String address=ip.getText().toString().trim();stopLive();runJob(()->{byte[] jpeg=fetchCameraFrame(address);checkCancelled();setPicture(decodeImage(new ByteArrayInputStream(jpeg),1));});});
+        espPhoto=button(root,"ESP32 사진 한 장 받기",v->{String address=ip.getText().toString().trim();stopLive();runJob(()->{byte[] jpeg=fetchCameraFrame(address);checkCancelled();setPicture(PhotoCodec.decodeEsp(new ByteArrayInputStream(jpeg)));});});
         language=new Spinner(this);language.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"English","한국어"}));root.addView(language);controls.add(language);
-        prompt=new EditText(this);prompt.setMinLines(3);prompt.setText("Describe the main visible objects and their positions. Mention only directly visible obstacles. If the image is unclear, say you cannot confirm. Do not give general advice about walking or white canes. Do not guess distance, motion or collision risk. Use two short sentences.");root.addView(prompt);controls.add(prompt);
+        promptLanguage=Math.max(0,Math.min(1,settings.getInt("output_language",1)));language.setSelection(promptLanguage);
+        prompt=new EditText(this);prompt.setMinLines(3);prompt.setText(savedPrompt(promptLanguage));rememberText(prompt,()->promptKey(promptLanguage));root.addView(prompt);controls.add(prompt);
         language.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
             public void onNothingSelected(android.widget.AdapterView<?> p){}
-            public void onItemSelected(android.widget.AdapterView<?> p,View v,int position,long id){if(!MonitorService.active()){settings.edit().putInt("output_language",position).apply();prompt.setText(position==0?DEFAULT_EN:DEFAULT_KO);}}
+            public void onItemSelected(android.widget.AdapterView<?> p,View v,int position,long id){if(!MonitorService.active()&&position==language.getSelectedItemPosition()&&position!=promptLanguage){settings.edit().putString(promptKey(promptLanguage),prompt.getText().toString()).putInt("output_language",position).apply();promptLanguage=position;prompt.setText(savedPrompt(position));}}
         });
-        yoloEnabled=new CheckBox(this);yoloEnabled.setText("YOLO 보조 감지 사용 (기기 내 실행)");yoloEnabled.setChecked(true);root.addView(yoloEnabled);controls.add(yoloEnabled);
-        speak=new CheckBox(this);speak.setText("분석 후 음성 안내 · 클라우드는 ElevenLabs / 로컬은 기본 TTS");speak.setChecked(true);root.addView(speak);
+        yoloEnabled=new CheckBox(this);yoloEnabled.setText("YOLO 보조 감지 사용 (기기 내 실행)");yoloEnabled.setChecked(settings.getBoolean("yolo_enabled",true));yoloEnabled.setOnCheckedChangeListener((v,checked)->{if(!applyingMonitorState)settings.edit().putBoolean("yolo_enabled",checked).apply();});root.addView(yoloEnabled);controls.add(yoloEnabled);
+        speak=new CheckBox(this);speak.setText("분석 후 음성 안내 · 클라우드는 ElevenLabs / 로컬은 기본 TTS");speak.setChecked(settings.getBoolean("walking_speech",true));speak.setOnCheckedChangeListener((v,checked)->{if(!applyingMonitorState)settings.edit().putBoolean("walking_speech",checked).apply();});root.addView(speak);
         button(root,"오프라인 한국어 음성 시험",v->say("길잡이 오프라인 음성 테스트입니다."));
         analyze=button(root,"기기에서 사진 분석",v->analyze());
         stop=new Button(this);stop.setText("중지 요청");stop.setEnabled(false);root.addView(stop);stop.setOnClickListener(v->{cancelled.set(true);abortCameraRequest();abortCloudRequest();if(tts!=null)tts.stop();if(eleven!=null)eleven.stop();setStatus("중지 요청됨 · 클라우드 연결은 닫고, 로컬 연산은 현재 처리 후 중지합니다.");});
         status=text(root,BuildConfig.BUNDLED_AI?"AI 모델이 앱에 포함돼 있습니다. 사진 분석을 누르면 자동으로 준비합니다.":"경량 빌드 · 장면 설명용 모델을 따로 선택해야 합니다.",14);result=text(root,"",18);result.setTextIsSelectable(true);
         text(root,"YOLO·기본 음성은 기기에서 실행됩니다. 클라우드 AI 사진은 선택한 Google 또는 OpenAI로 전송됩니다. 새 물체 알림은 거리나 충돌 위험을 측정하지 않습니다.",12);
         tts=new TextToSpeech(this,code->{if(code!=TextToSpeech.SUCCESS)ui(()->setStatus("기본 TTS 초기화 실패 · 화면 결과를 확인하세요."));});
-        language.setSelection(settings.getInt("output_language",1));prompt.setText(language.getSelectedItemPosition()==0?DEFAULT_EN:DEFAULT_KO);
         aiModes.setOnCheckedChangeListener((group,id)->{
             boolean cloud=cloudSelected();settings.edit().putBoolean("cloud",cloud).putString("vision_provider",visionProvider()).apply();
             if(applyingMonitorState)return;
@@ -229,6 +235,9 @@ public final class MainActivity extends Activity {
         updateControls();
     }
     private int selectedSource(){return cameraSource.getSelectedItemPosition();}
+    private String promptKey(int language){return language==0?"prompt_en":"prompt_ko";}
+    private String savedPrompt(int language){return settings.getString(promptKey(language),language==0?DEFAULT_EN:DEFAULT_KO);}
+    private void rememberText(EditText field,java.util.function.Supplier<String> key){field.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}public void afterTextChanged(Editable value){if(!destroyed&&!applyingMonitorState)settings.edit().putString(key.get(),value.toString()).apply();}});}
     private boolean requireCamera(Runnable action){
         if(checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)return true;
         cameraPermissionAction=action;requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA_PERMISSION);return false;
@@ -384,7 +393,10 @@ public final class MainActivity extends Activity {
             for(int i=0;i<INTERVALS.length;i++)if(INTERVALS[i]==c.intervalMs)autoInterval.setSelection(i);
             applyingMonitorState=false;
         }
-        if(snapshot.active||monitorWasActive){autoStatus.setText(snapshot.status);setStatus(snapshot.status);voiceStatus.setText(snapshot.speechStatus);if(!snapshot.result.isEmpty())result.setText(snapshot.result);}
+        if(snapshot.active||monitorWasActive){
+            String haptics=snapshot.config==null?"":!snapshot.config.notify?"\n보행 경고 진동 꺼짐":snapshot.bleReady?"\n보행 경고 진동 켜짐 · 같은 상황은 반복하지 않음":"\n보행 경고 진동 대기 · BLE 연결 필요";
+            autoStatus.setText(snapshot.status+haptics);setStatus(snapshot.status);voiceStatus.setText(snapshot.speechStatus);if(!snapshot.result.isEmpty())result.setText(snapshot.result);
+        }
         monitorWasActive=snapshot.active;updateControls();
     }
     private void onMonitorFrame(MonitorService.ViewFrame frame){
@@ -401,6 +413,7 @@ public final class MainActivity extends Activity {
         release.setEnabled(!busy&&!active&&loaded);analyze.setEnabled(!busy&&!active&&(cloudSelected()||loaded||bundledModels!=null)&&imageBytes!=null);stop.setEnabled(busy);
         liveStart.setEnabled(!busy&&!active&&live==null);liveStop.setEnabled(live!=null);ip.setEnabled(!busy&&!active&&live==null&&selectedSource()==CameraSource.ESP);
         cameraSource.setEnabled(!busy&&!active&&live==null);
+        espPreset.setEnabled(!busy&&!active&&live==null&&selectedSource()==CameraSource.ESP);
         espDiagnose.setEnabled(!busy&&!active&&selectedSource()==CameraSource.ESP);espPhoto.setEnabled(!busy&&!active&&selectedSource()==CameraSource.ESP);
         liveStart.setText(CameraSource.label(selectedSource())+" 영상 + YOLO 시작");
         bleDevices.setEnabled(!BoardService.active()&&!busy);serviceUuid.setEnabled(!BoardService.active()&&!busy);characteristicUuid.setEnabled(!BoardService.active()&&!busy);
@@ -438,11 +451,11 @@ public final class MainActivity extends Activity {
             long started=SystemClock.elapsedRealtime();
             byte[] photo;
             try{photo=fetchCameraFrame(snapshot);}catch(IOException e){throw new IOException("사진 수신 실패: "+e.getMessage(),e);}
-            setPicture(decodeImage(new ByteArrayInputStream(photo),1));
+            setPicture(PhotoCodec.decodeEsp(new ByteArrayInputStream(photo)));
             long photoMs=SystemClock.elapsedRealtime()-started;checkCancelled();
             byte[] frame;
             try{frame=fetchCameraFrame(address,true);}catch(IOException e){throw new IOException("사진은 정상("+photoMs+"ms), 영상 주소는 실패: "+e.getMessage(),e);}
-            checkCancelled();setPicture(decodeImage(new ByteArrayInputStream(frame),1));
+            checkCancelled();setPicture(PhotoCodec.decodeEsp(new ByteArrayInputStream(frame)));
             long totalMs=SystemClock.elapsedRealtime()-started;
             ui(()->{liveStatus.setText("연결 진단 완료 · 사진 "+photoMs+"ms / 영상 첫 프레임 "+(totalMs-photoMs)+"ms\n크롬 카메라 탭을 닫고 ESP 영상 + YOLO 시작을 누르세요.");setStatus("ESP 사진과 영상에서 각각 JPEG 수신 확인. 지속 전송 속도 검증은 별도입니다.");});
         });
@@ -459,7 +472,7 @@ public final class MainActivity extends Activity {
             }
             WifiCamera.Choice choice=WifiCamera.choose(this,address);
             liveStatus.setText(choice.description+"\nESP 영상 연결 중...");
-            live=new LiveCamera(this,address,choice.connector,jpeg->decodeImage(new ByteArrayInputStream(jpeg),1),frame->onLiveFrame(generation,frame),message->ui(()->{if(generation==liveGeneration)liveStatus.setText(choice.description+"\n"+message);}),message->ui(()->{if(generation==liveGeneration){stopLive();liveStatus.setText("영상 중지: "+message.message);}}));
+            live=new LiveCamera(this,address,choice.connector,jpeg->PhotoCodec.decodeEsp(new ByteArrayInputStream(jpeg)),frame->onLiveFrame(generation,frame),message->ui(()->{if(generation==liveGeneration)liveStatus.setText(choice.description+"\n"+message);}),message->ui(()->{if(generation==liveGeneration){stopLive();liveStatus.setText("영상 중지: "+message.message);}}));
             updateControls();
         }catch(Exception e){liveStatus.setText(e.getMessage());}
     }

@@ -48,6 +48,9 @@ final class LocalCamera {
         private final HttpURLConnection connection;
         private final Consumer<String> progress;
         private final AtomicBoolean closed=new AtomicBoolean();
+        private final AtomicBoolean inputClosed=new AtomicBoolean();
+        private final Object readLock=new Object();
+        private boolean reading;private volatile boolean disconnectFailed;
         private volatile InputStream input;
         Request(String address,Connector connector,Consumer<String> progress,int connectMs,int readMs) throws IOException {
             URL url=new URL(address);if(!isAllowed(url))throw new IOException("사설 IPv4 카메라 주소를 입력하세요.");
@@ -64,16 +67,31 @@ final class LocalCamera {
                 String type=connection.getContentType();
                 if(type==null||!(type.toLowerCase(java.util.Locale.ROOT).contains("image/jpeg")||type.toLowerCase(java.util.Locale.ROOT).contains("multipart/")))throw new IOException("ESP 응답은 받았지만 JPEG 영상이 아닙니다. 주소를 확인하세요.");
                 input=connection.getInputStream();
-                if(closed.get()){try{input.close();}catch(IOException ignored){}checkOpen();}
+                if(closed.get()){closeInput();checkOpen();}
                 progress.accept("ESP 응답 확인 · 첫 사진 수신 대기 중...");
                 return new Session(this,input,type.toLowerCase(java.util.Locale.ROOT).contains("multipart/"));
             }catch(SocketTimeoutException e){close();throw new IOException("ESP HTTP 응답 시간 초과 · 크롬의 카메라 영상 탭을 모두 닫고, ESP Wi-Fi 연결과 카메라 주소를 확인하세요.",e);}
             catch(IOException|RuntimeException e){close();throw e;}
         }
         private void checkOpen() throws IOException {if(closed.get())throw new IOException("카메라 연결을 중지했습니다.");}
+        private byte[] readFrame(JpegReader reader)throws IOException{
+            synchronized(readLock){checkOpen();if(reading)throw new IOException("동시에 두 프레임을 읽을 수 없습니다.");reading=true;}
+            try{byte[] jpeg=reader.next();checkOpen();return jpeg;}
+            finally{synchronized(readLock){reading=false;if(closed.get()){if(disconnectFailed)disconnect();closeInput();}}}
+        }
+        private void disconnect(){
+            try{connection.disconnect();disconnectFailed=false;}
+            catch(RuntimeException failure){disconnectFailed=true;CrashDiagnostics.record("ESP HTTP 연결 중지",failure);}
+        }
+        private void closeInput(){
+            InputStream active=input;if(active==null||!inputClosed.compareAndSet(false,true))return;
+            try{active.close();}catch(IOException|RuntimeException failure){CrashDiagnostics.record("ESP HTTP 응답 정리",failure);}
+        }
         @Override public void close(){
-            if(!closed.compareAndSet(false,true))return;
-            connection.disconnect();InputStream active=input;if(active!=null)try{active.close();}catch(IOException ignored){}
+            if(closed.compareAndSet(false,true))disconnect();
+            // Android's chunked HTTP close may read/discard bytes itself. Never race
+            // InputStream.close against next(); its reading thread owns final cleanup.
+            synchronized(readLock){if(!reading)closeInput();}
         }
     }
     static final class Session implements AutoCloseable {
@@ -81,7 +99,7 @@ final class LocalCamera {
         private final Request request;private long frames;
         Session(Request request,InputStream input,boolean multipart){this.request=request;this.multipart=multipart;reader=new JpegReader(input,2*1024*1024);}
         byte[] next() throws IOException {
-            try{byte[] jpeg=reader.next();frames++;return jpeg;}
+            try{byte[] jpeg=request.readFrame(reader);frames++;return jpeg;}
             catch(SocketTimeoutException e){throw new IOException((frames==0?"ESP 응답은 받았지만 첫 영상 프레임이 15초 동안 오지 않았습니다.":"ESP 영상 수신이 15초 동안 멈췄습니다.")+" 다른 카메라 탭과 전원·Wi-Fi 상태를 확인하세요.",e);}
         }
         @Override public void close(){request.close();}

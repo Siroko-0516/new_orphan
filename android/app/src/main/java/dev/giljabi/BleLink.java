@@ -106,10 +106,11 @@ final class BleLink implements AutoCloseable {
             if(!writing||writer==null||!characteristic.getUuid().equals(writer.getUuid()))return;
             main.removeCallbacks(writeTimeout);writing=false;
             if(code!=BluetoothGatt.GATT_SUCCESS){disconnect();status.accept("BLE 쓰기 실패 · 상태 "+code);return;}
-            writes.poll();status.accept("BLE 쓰기 완료 · 아두이노 수신은 보드에서 확인하세요.");writeNext();
+            byte[] sent=writes.poll();String signal=sent!=null&&"OBSTACLE\n".equals(new String(sent,StandardCharsets.US_ASCII))?"보행 경고":"TEST";
+            status.accept("BLE "+signal+" 쓰기 완료 · 보드 수신·진동은 기기에서 확인하세요.");writeNext();
         });}
     };
-    private void finishSubscription(boolean enabled){subscribing=false;buttonsReady=enabled;main.removeCallbacks(connectionTimeout);status.accept(enabled?"BLE 연결됨 · 서보 전송 / ASSIST 버튼 수신 준비 완료":"BLE 연결됨 · 전송 가능, 버튼 알림은 모듈 Notify 설정을 확인하세요.");stateChanged.run();}
+    private void finishSubscription(boolean enabled){subscribing=false;buttonsReady=enabled;main.removeCallbacks(connectionTimeout);status.accept(enabled?"BLE 연결됨 · 보행 경고 전송 / ASSIST 버튼 수신 준비 완료":"BLE 연결됨 · 전송 가능, 버튼 알림은 모듈 Notify 설정을 확인하세요.");stateChanged.run();}
     boolean send(String command){
         if(!isReady()){status.accept("먼저 HM-10을 연결하세요.");return false;}
         byte[] data=command.getBytes(StandardCharsets.US_ASCII);

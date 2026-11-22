@@ -76,7 +76,7 @@ final class GeminiClient {
                 .put("properties",new JSONObject().put("speak",new JSONObject().put("type","BOOLEAN")).put("message",new JSONObject().put("type","STRING")).put("urgency",new JSONObject().put("type","STRING").put("enum",new JSONArray().put("none").put("notice").put("urgent"))))
                 .put("required",new JSONArray().put("speak").put("message").put("urgency")));
             JSONObject body=new JSONObject()
-                .put("systemInstruction",new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text","Describe only directly visible evidence in the requested language. Automatic walking guidance uses natural Korean. A cane-mounted camera sweeps; image position is not a measured travel path. Do not invent distances, physical height, safety, or cane capabilities. Treat YOLO observations as fallible context. For automatic walking guidance obey the requested JSON and speak=false when nothing useful changed."))))
+                .put("systemInstruction",new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text",WalkingGuidance.VISION_SYSTEM))))
                 .put("contents",new JSONArray().put(new JSONObject().put("role","user").put("parts",parts))).put("generationConfig",generation);
             return body.toString().getBytes(StandardCharsets.UTF_8);
         }catch(JSONException e){throw new IOException("Gemini 요청을 만들지 못했습니다.",e);}
@@ -107,7 +107,6 @@ final class GeminiClient {
         private final byte[] body;
         private final BooleanSupplier cancelled;
         private final AtomicBoolean closed=new AtomicBoolean();
-        private volatile InputStream input;
         private volatile boolean timedOut;private long deadlineMs=20000;private ScheduledFuture<?> deadline;
         Request(String model,String key,byte[] jpeg,String question,Connector connector,BooleanSupplier cancelled) throws IOException {
             this(model,key,payload(jpeg,question),connector,cancelled);
@@ -136,16 +135,17 @@ final class GeminiClient {
                 }
                 check();int code=connection.getResponseCode();check();
                 if(code!=200){byte[] error=new byte[0];try(InputStream stream=connection.getErrorStream()){if(stream!=null)error=readError(stream);}catch(IOException ignored){}throw new ApiException(code,error);}
-                input=connection.getInputStream();check();
-                ByteArrayOutputStream result=new ByteArrayOutputStream();byte[] block=new byte[8192];int n;
-                while((n=input.read(block))!=-1){check();if(result.size()+n>MAX_RESPONSE)throw new IOException("Gemini 응답이 너무 큽니다.");result.write(block,0,n);}
-                check();return response(result.toByteArray());
+                try(InputStream input=connection.getInputStream()){
+                    check();ByteArrayOutputStream result=new ByteArrayOutputStream();byte[] block=new byte[8192];int n;
+                    while((n=input.read(block))!=-1){check();if(result.size()+n>MAX_RESPONSE)throw new IOException("Gemini 응답이 너무 큽니다.");result.write(block,0,n);}
+                    check();return response(result.toByteArray());
+                }
             }catch(SocketTimeoutException e){throw new IOException("Gemini 응답 시간 초과. 서버가 지연 중이거나 인터넷이 불안정합니다. 최신 사진으로 다시 시도하세요.",e);}
             catch(IOException e){if(timedOut)throw new IOException("Gemini 응답 대기 시간을 넘겨 요청을 중단했습니다. 서버 상태·인터넷을 확인하고 재시도하세요.",e);throw e;}
             finally{close();}
         }
         private void check() throws IOException {if(closed.get()||cancelled.getAsBoolean())throw new IOException("Gemini 요청을 중지했습니다.");}
-        @Override public void close(){ScheduledFuture<?> timer=deadline;if(timer!=null)timer.cancel(false);if(closed.compareAndSet(false,true))connection.disconnect();InputStream stream=input;if(stream!=null)try{stream.close();}catch(IOException ignored){}}
+        @Override public void close(){ScheduledFuture<?> timer=deadline;if(timer!=null)timer.cancel(false);if(closed.compareAndSet(false,true))try{connection.disconnect();}catch(RuntimeException failure){CrashDiagnostics.record("Gemini HTTP 요청 중지",failure);}}
     }
     static byte[] readError(InputStream stream)throws IOException{ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] chunk=new byte[1024];int n;while(out.size()<32768&&(n=stream.read(chunk,0,Math.min(chunk.length,32768-out.size())))!=-1)out.write(chunk,0,n);return out.toByteArray();}
     static String apiError(int code,byte[] body){

@@ -14,7 +14,7 @@ final class ElevenSpeech implements AutoCloseable {
     static final long DEFAULT_WAIT_MS=7000;
     private final Context context;
     private final Consumer<String> status,fallback,started;
-    private final Runnable finished;private final boolean communication;
+    private final Runnable finished;private final boolean communication;private final float playbackRate;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final AtomicLong generation=new AtomicLong();
@@ -24,24 +24,29 @@ final class ElevenSpeech implements AutoCloseable {
     private MediaPlayer player;private File audioFile;
     private static final class Attempt {
         final long generation;final String text;final SpeechFallbackGate gate;
+        final Runnable completed;
         Runnable timeout,validate;
-        Attempt(long generation,String text,BooleanSupplier valid){this.generation=generation;this.text=text;gate=new SpeechFallbackGate(valid);}
+        Attempt(long generation,String text,BooleanSupplier valid,Runnable completed){this.generation=generation;this.text=text;gate=new SpeechFallbackGate(valid);this.completed=completed;}
     }
     ElevenSpeech(Context context,Consumer<String> status){this(context,status,null,null);}
     ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback){this(context,status,fallback,null);}
     ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback,Consumer<String> started){this(context,status,fallback,started,null,false);}
-    ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback,Consumer<String> started,Runnable finished,boolean communication){this.context=context.getApplicationContext();this.status=status;this.fallback=fallback;this.started=started;this.finished=finished;this.communication=communication;}
+    ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback,Consumer<String> started,Runnable finished,boolean communication){this(context,status,fallback,started,finished,communication,1f);}
+    ElevenSpeech(Context context,Consumer<String> status,Consumer<String> fallback,Consumer<String> started,Runnable finished,boolean communication,float playbackRate){this.context=context.getApplicationContext();this.status=status;this.fallback=fallback;this.started=started;this.finished=finished;this.communication=communication;this.playbackRate=playbackRate;}
     void speak(String text){speak(text,()->true,DEFAULT_WAIT_MS);}
     void speak(String text,BooleanSupplier valid){speak(text,valid,DEFAULT_WAIT_MS);}
     void speak(String text,BooleanSupplier valid,long waitMs){
-        if(closed)return;long chosen=generation.incrementAndGet();
-        if(Looper.myLooper()!=main.getLooper()){main.post(()->begin(text,valid,waitMs,chosen));return;}
-        begin(text,valid,waitMs,chosen);
+        speak(text,valid,waitMs,null);
     }
-    private void begin(String text,BooleanSupplier valid,long waitMs,long chosen){
+    void speak(String text,BooleanSupplier valid,long waitMs,Runnable completed){
+        if(closed)return;long chosen=generation.incrementAndGet();
+        if(Looper.myLooper()!=main.getLooper()){main.post(()->begin(text,valid,waitMs,chosen,completed));return;}
+        begin(text,valid,waitMs,chosen,completed);
+    }
+    private void begin(String text,BooleanSupplier valid,long waitMs,long chosen,Runnable completed){
         if(closed||generation.get()!=chosen)return;
         if(current!=null)cancel(current);else{releasePlayer();closeRequest();}
-        Attempt attempt=new Attempt(chosen,text,()->!closed&&generation.get()==chosen&&valid!=null&&valid.getAsBoolean());
+        Attempt attempt=new Attempt(chosen,text,()->!closed&&generation.get()==chosen&&valid!=null&&valid.getAsBoolean(),completed);
         current=attempt;if(!attempt.gate.active()){cancel(attempt);return;}
         String voice=context.getSharedPreferences("ai-settings",Context.MODE_PRIVATE).getString("eleven_voice",ElevenLabsClient.FEMALE);
         status.accept("ElevenLabs 음성 생성 중...");
@@ -86,6 +91,7 @@ final class ElevenSpeech implements AutoCloseable {
                 if(current!=attempt||player!=p)return;
                 if(attempt.gate.hasStarted())return;
                 if(!attempt.gate.active()){cancel(attempt);return;}
+                if(playbackRate!=1f)try{p.setPlaybackParams(new PlaybackParams().setSpeed(playbackRate).setPitch(1f));}catch(RuntimeException unsupported){/* Keep ordinary playback on devices without speed control. */}
                 try{p.start();}catch(RuntimeException failure){fail(attempt,"ElevenLabs 재생에 실패해");return;}
                 if(!attempt.gate.claimStart()){if(!attempt.gate.current())cancel(attempt);return;}
                 removeTimeout(attempt);
@@ -96,7 +102,7 @@ final class ElevenSpeech implements AutoCloseable {
             active.setOnCompletionListener(p->{
                 if(current!=attempt||player!=p)return;
                 boolean completed=attempt.gate.complete();removeCallbacks(attempt);releasePlayer();current=null;
-                if(completed){status.accept("ElevenLabs 음성 안내 완료");if(finished!=null)finished.run();}
+                if(completed){status.accept("ElevenLabs 음성 안내 완료");if(attempt.completed!=null)attempt.completed.run();else if(finished!=null)finished.run();}
             });
             active.setOnErrorListener((p,what,extra)->{if(current==attempt&&player==p)fail(attempt,"ElevenLabs 재생에 실패해");return true;});
             if(!attempt.gate.active()){cancel(attempt);return;}active.prepareAsync();

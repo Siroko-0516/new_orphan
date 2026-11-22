@@ -58,6 +58,18 @@ public class BoardServiceLifecycleTest {
     @Test public void changingEndpointExplicitlyClosesPreviousConnection(){board.onStartCommand(connectIntent("AA:BB:CC:DD:EE:02"),0,2);assertEquals(1,board.fake.closes);assertEquals(2,board.fake.connects);assertEquals("AA:BB:CC:DD:EE:02",BoardService.snapshot().address);}
     @Test public void leavingAndDestroyingActivityKeepsBoardConnection(){ActivityController<MainActivity> activity=Robolectric.buildActivity(MainActivity.class).setup();activity.pause().stop().destroy();assertTrue(BoardService.ready());assertEquals(0,board.fake.closes);assertTrue(BoardService.send("TEST\n"));assertEquals(Collections.singletonList("TEST\n"),board.fake.sent);}
     @Test public void stoppingRealTimeAiKeepsBoardAndTestWorks()throws Exception{startMonitor();finishMonitor();assertTrue(BoardService.ready());assertEquals(0,board.fake.closes);assertTrue(BoardService.send("TEST\n"));}
+    @Test public void stoppingRealMonitorKeepsActivityAndDraftAndReopeningRestoresIt()throws Exception{
+        ActivityController<MainActivity> activity=Robolectric.buildActivity(MainActivity.class).setup();
+        java.lang.reflect.Field field=MainActivity.class.getDeclaredField("prompt");field.setAccessible(true);String question="통로에 있는 사람만 짧게 알려줘.";
+        try{
+            ((android.widget.EditText)field.get(activity.get())).setText(question);
+            monitorController=Robolectric.buildService(MonitorService.class).create();
+            MonitorConfig c=new MonitorConfig("",question,GeminiClient.DEFAULT_MODEL,true,true,true,true,1000,"",BleLink.DEFAULT_SERVICE,BleLink.DEFAULT_CHARACTERISTIC,CameraSource.BACK);
+            monitorController.get().onStartCommand(c.write(new Intent().setAction("dev.giljabi.MONITOR_START")),0,1);finishMonitor();
+            assertFalse(activity.get().isFinishing());assertEquals(question,((android.widget.EditText)field.get(activity.get())).getText().toString());assertTrue(BoardService.ready());
+        }finally{activity.pause().stop().destroy();}
+        ActivityController<MainActivity> reopened=Robolectric.buildActivity(MainActivity.class).setup();try{shadowOf(Looper.getMainLooper()).idle();assertEquals(question,((android.widget.EditText)field.get(reopened.get())).getText().toString());}finally{reopened.pause().stop().destroy();}
+    }
     @Test public void stoppingVoiceAssistantKeepsBoard(){assistantController=Robolectric.buildService(AssistantService.class).create();assistantController.get().onStartCommand(new Intent().setAction("dev.giljabi.ASSISTANT_START"),0,1);assistantController.get().onStartCommand(new Intent().setAction("dev.giljabi.ASSISTANT_STOP"),0,2);assistantController.destroy();assistantController=null;assertTrue(BoardService.ready());assertEquals(0,board.fake.closes);}
     @Test public void unexpectedDropReconnectsWithoutReplayingMotorCommands(){assertTrue(BoardService.send("OBSTACLE\n"));board.fake.drop();assertFalse(BoardService.send("TEST\n"));shadowOf(Looper.getMainLooper()).idleFor(10,TimeUnit.SECONDS);assertTrue(BoardService.ready());assertEquals(2,board.fake.connects);assertEquals(Collections.singletonList("OBSTACLE\n"),board.fake.sent);}
     @Test public void explicitDisconnectCancelsReconnect(){board.onStartCommand(new Intent().setAction(BoardService.DISCONNECT),0,2);shadowOf(Looper.getMainLooper()).idleFor(30,TimeUnit.SECONDS);assertFalse(BoardService.active());assertEquals(1,board.fake.connects);assertEquals(1,board.fake.closes);}

@@ -18,7 +18,7 @@ final class ElevenLabsClient {
         private final String text,key,voice;
         private final GeminiClient.Connector connector;
         private final BooleanSupplier cancelled;
-        private final AtomicBoolean closed=new AtomicBoolean();
+        private final AtomicBoolean closed=new AtomicBoolean(),disconnected=new AtomicBoolean();
         private volatile HttpURLConnection connection;
         Request(String text,String key,String voice,GeminiClient.Connector connector,BooleanSupplier cancelled)throws IOException{
             if(text==null||text.trim().isEmpty()||text.length()>2000)throw new IOException("음성 안내 문장은 1~2000자여야 합니다.");
@@ -48,7 +48,7 @@ final class ElevenLabsClient {
                 }
             }finally{timeout.cancel(false);timer.shutdownNow();close();}
         }
-        @Override public void close(){closed.set(true);HttpURLConnection active=connection;if(active!=null)active.disconnect();}
+        @Override public void close(){closed.set(true);HttpURLConnection active=connection;if(active!=null&&disconnected.compareAndSet(false,true))try{active.disconnect();}catch(RuntimeException failure){CrashDiagnostics.record("ElevenLabs HTTP 요청 중지",failure);}}
     }
     private static String problem(int status){
         switch(status){case 401:return "ElevenLabs API 키 인증에 실패했습니다.";case 403:return "ElevenLabs 음성 사용 권한을 확인하세요.";case 404:return "기존 ElevenLabs Voice ID를 찾을 수 없습니다.";case 429:return "ElevenLabs 사용량 또는 동시 요청 한도에 도달했습니다.";default:return "ElevenLabs 음성 생성 실패 (HTTP "+status+").";}

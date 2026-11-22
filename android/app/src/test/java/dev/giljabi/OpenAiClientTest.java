@@ -36,6 +36,9 @@ public class OpenAiClientTest {
         JSONArray parts=body.getJSONArray("messages").getJSONObject(1).getJSONArray("content");assertEquals(5,parts.length());assertTrue(parts.getJSONObject(0).getString("text").contains("1 of 2"));assertTrue(parts.getJSONObject(2).getString("text").contains("2 of 2"));
         JSONObject format=body.getJSONObject("response_format").getJSONObject("json_schema");assertTrue(format.getBoolean("strict"));assertFalse(format.getJSONObject("schema").getBoolean("additionalProperties"));assertEquals(3,format.getJSONObject("schema").getJSONArray("required").length());
     }
+    @Test public void newestWalkingPhotoCanUseMoreDetailWhileHistoryStaysLightweight()throws Exception{
+        JSONObject body=new JSONObject(new String(OpenAiClient.visionPayload(OpenAiClient.DEFAULT_MODEL,new byte[][]{JPEG,JPEG},"짧게 안내",true),StandardCharsets.UTF_8));JSONArray c=body.getJSONArray("messages").getJSONObject(1).getJSONArray("content");assertEquals("low",c.getJSONObject(1).getJSONObject("image_url").getString("detail"));assertEquals("auto",c.getJSONObject(3).getJSONObject("image_url").getString("detail"));
+    }
     @Test public void voiceSendsActualWavToTranscriptionOnly()throws Exception{
         Connection c=new Connection(new URL("https://api.openai.com/v1/audio/transcriptions"));c.response="{\"text\":\"내 위치가 어디야\"}";byte[] wav=AssistantWav.encode(new byte[6400]);
         try(CloudRequest request=OpenAiClient.transcribeRequest(KEY,wav,url->{assertEquals(c.getURL(),url);return c;},()->false)){assertEquals("내 위치가 어디야",request.execute());}

@@ -7,6 +7,8 @@ import java.io.*;
 
 /** Bounded photo decoding shared by foreground UI and monitoring service. */
 final class PhotoCodec {
+    /** Additional clockwise rotation for the user's sideways ESP32-CAM mount. */
+    static Bitmap decodeEsp(InputStream input) throws IOException {return decode(input,6);}
     static Bitmap decode(InputStream input,int orientation) throws IOException {
         if(input==null)throw new IOException("사진을 읽을 수 없습니다.");
         // Bounded encoded data; decode sampled pixels rather than a full camera-resolution bitmap.

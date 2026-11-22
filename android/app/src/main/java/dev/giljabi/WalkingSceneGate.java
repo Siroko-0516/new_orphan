@@ -10,9 +10,12 @@ final class WalkingSceneGate {
         final SceneSignature signature;
         final List<YoloDetector.Box> boxes;
         final Reason reason;
-        final String context,stateKey;
+        final String context,stateKey,memoryKey;
         Decision(long epoch,long sequence,long observedAt,long episode,SceneSignature signature,List<YoloDetector.Box> boxes,Reason reason,String context,String stateKey){
-            this.epoch=epoch;this.sequence=sequence;this.observedAt=observedAt;this.episode=episode;this.signature=signature;this.boxes=Collections.unmodifiableList(copyBoxes(boxes));this.reason=reason;this.context=context;this.stateKey=stateKey;
+            this(epoch,sequence,observedAt,episode,signature,boxes,reason,context,stateKey,stateKey);
+        }
+        Decision(long epoch,long sequence,long observedAt,long episode,SceneSignature signature,List<YoloDetector.Box> boxes,Reason reason,String context,String stateKey,String memoryKey){
+            this.epoch=epoch;this.sequence=sequence;this.observedAt=observedAt;this.episode=episode;this.signature=signature;this.boxes=Collections.unmodifiableList(copyBoxes(boxes));this.reason=reason;this.context=context;this.stateKey=stateKey;this.memoryKey=memoryKey;
         }
     }
     private static final long KEEP_MS=12000,EVIDENCE_MS=3000,CLEAR_MS=3000,REVIEW_MS=12000;
@@ -26,11 +29,21 @@ final class WalkingSceneGate {
         int slot,label;boolean confirmed,pathConfirmed;
         long lastSeen,lastSequence,lastPath=-1;
         String episodeBand;
+        float anchorWidth,anchorHeight;
+        long growingSince=-1;int growingFrames;boolean grew,entered,returningEncounter;
         YoloDetector.Box box;
         Track(long id,String category,YoloDetector.Box box){this.id=id;this.category=category;this.box=copyBox(box);label=box.label;Arrays.fill(labels,-1);}
-        void advance(){slot=(slot+1)%WINDOW;seen[slot]=central[slot]=false;labels[slot]=-1;}
+        void advance(){slot=(slot+1)%WINDOW;seen[slot]=central[slot]=false;labels[slot]=-1;grew=entered=false;}
         int count(boolean[] values,long now){int total=0;for(int i=0;i<WINDOW;i++)if(values[i]&&now>=times[i]&&now-times[i]<=EVIDENCE_MS)total++;return total;}
         void update(YoloDetector.Box next,long sequence,long now){
+            grew=entered=false;if(now-lastSeen>750){growingSince=-1;growingFrames=0;}
+            float nextWidth=next.xy[2]-next.xy[0],nextHeight=next.xy[3]-next.xy[1];
+            if(dynamic(category)&&path(now)&&now-lastSeen>=1500&&nextWidth<anchorWidth*.70f&&nextHeight<anchorHeight*.55f){
+                // A large former subject followed by a much smaller subject after a gap
+                // needs fresh evidence. A brief dropout alone does not rearm anything.
+                Arrays.fill(seen,false);Arrays.fill(central,false);Arrays.fill(labels,-1);
+                confirmed=pathConfirmed=false;lastPath=-1;returningEncounter=true;
+            }
             float[] smooth=new float[4];for(int i=0;i<4;i++)smooth[i]=box.xy[i]*.4f+next.xy[i]*.6f;
             box=new YoloDetector.Box(next.label,next.score,smooth);lastSeen=now;lastSequence=sequence;
             seen[slot]=true;central[slot]=inCorridor(next);times[slot]=now;labels[slot]=next.label;
@@ -41,24 +54,30 @@ final class WalkingSceneGate {
             label=best;
             boolean retained=pathConfirmed&&lastPath>=0&&now-lastPath<=KEEP_MS;
             if(confirmed&&count(central,now)>=2){
-                if(!retained)episodeBand=band(box);
+                if(!retained){episodeBand=band(box);anchorWidth=box.xy[2]-box.xy[0];anchorHeight=box.xy[3]-box.xy[1];entered=true;}
                 pathConfirmed=true;
                 if(central[slot])lastPath=now;
             }else if(retained&&central[slot])lastPath=now;
+            if(entered&&returningEncounter){grew=true;returningEncounter=false;}
+            float width=box.xy[2]-box.xy[0],height=box.xy[3]-box.xy[1];
+            boolean growing=dynamic(category)&&path(now)&&central[slot]&&anchorWidth>0&&anchorHeight>0&&width>=anchorWidth*1.20f&&height>=anchorHeight*1.35f&&width-anchorWidth>=.04f&&height-anchorHeight>=.10f&&width*height>=anchorWidth*anchorHeight*1.75f;
+            if(growing){if(growingSince<0)growingSince=now;growingFrames++;if(growingFrames>=2&&now-growingSince>=250){grew=true;anchorWidth=width;anchorHeight=height;growingSince=-1;growingFrames=0;}}
+            else{growingSince=-1;growingFrames=0;}
         }
         boolean path(long now){return confirmed&&pathConfirmed&&lastPath>=0&&now-lastPath<=KEEP_MS;}
     }
     private final List<Track> tracks=new ArrayList<>();
-    private long epoch,episode=1,nextId=1,sequence=-1,now=-1,lastAcceptedAt=-1,lastAcceptedSequence=-1,clearSince=-1;
+    private long epoch,episode=1,nextId=1,sequence=-1,now=-1,lastAcceptedAt=-1,lastAcceptedSequence=-1,clearSince=-1,lastClearAt=-1;
     private int clearFrames;
     private boolean episodeHadPath;
     private SceneSignature latest;
     private List<YoloDetector.Box> latestBoxes=Collections.emptyList();
-    private String acceptedKey;
+    private String acceptedKey,acceptedMotion;
+    private final long[] motionRevisions=new long[3];
 
-    synchronized void reset(){epoch++;episode=1;nextId=1;sequence=now=lastAcceptedAt=lastAcceptedSequence=-1;clearSince=-1;clearFrames=0;episodeHadPath=false;tracks.clear();latest=null;latestBoxes=Collections.emptyList();acceptedKey=null;}
+    synchronized void reset(){epoch++;episode=1;nextId=1;sequence=now=lastAcceptedAt=lastAcceptedSequence=lastClearAt=-1;clearSince=-1;clearFrames=0;episodeHadPath=false;tracks.clear();latest=null;latestBoxes=Collections.emptyList();acceptedKey=acceptedMotion=null;Arrays.fill(motionRevisions,0);}
     synchronized void reconnect(){
-        latest=null;latestBoxes=Collections.emptyList();sequence=-1;
+        latest=null;latestBoxes=Collections.emptyList();sequence=lastClearAt=-1;
         // Connection recovery does not create a new scene or forget an announced object.
         for(Track track:tracks){Arrays.fill(track.seen,false);Arrays.fill(track.central,false);Arrays.fill(track.labels,-1);track.lastSequence=-1;}
     }
@@ -67,6 +86,7 @@ final class WalkingSceneGate {
         if(signature==null)throw new IllegalArgumentException("A scene signature is required");
         this.sequence=sequence;this.now=now;latest=signature;
         latestBoxes=signature.unclearMessage()==null?copyBoxes(boxes):Collections.emptyList();
+        if(signature.unclearMessage()==null)lastClearAt=now;
         tracks.removeIf(t->now-t.lastSeen>KEEP_MS);
         for(Track track:tracks)track.advance();
         Set<Track> used=new HashSet<>();boolean visiblePathCandidate=false;
@@ -85,6 +105,18 @@ final class WalkingSceneGate {
             }
             best.update(box,sequence,now);used.add(best);
         }
+        boolean[] changes=new boolean[3];
+        for(Track track:used){
+            int type=dynamicIndex(track.category);if(type<0)continue;
+            if(track.grew)changes[type]=true;
+            if(track.entered)for(Track other:tracks){
+                if(other==track||other.entered||!other.category.equals(track.category)||!other.path(now))continue;
+                double dx=Math.abs((track.box.xy[0]+track.box.xy[2]-other.box.xy[0]-other.box.xy[2])/2);
+                // A stable, spatially distinct entrant is a review hint, never proof of danger.
+                if(YoloDetector.iou(track.box.xy,other.box.xy)<.10&&(other.lastSequence==sequence?dx>=.25:now-other.lastSeen>=1500)){changes[type]=true;break;}
+            }
+        }
+        for(int i=0;i<changes.length;i++)if(changes[i])motionRevisions[i]++;
         boolean rememberedPath=false;for(Track track:tracks)rememberedPath|=track.path(now);
         if(rememberedPath){episodeHadPath=true;clearSince=-1;clearFrames=0;}
         else if(episodeHadPath&&!visiblePathCandidate&&signature.unclearMessage()==null){
@@ -95,26 +127,33 @@ final class WalkingSceneGate {
     synchronized Decision decision(long frame){
         if(latest==null||frame!=sequence)return null;
         String key=stateKey();
-        Reason reason=acceptedKey==null?Reason.INITIAL:!key.equals(acceptedKey)?Reason.PATH_CHANGE:
+        Reason reason=acceptedKey==null?Reason.INITIAL:!key.equals(acceptedKey)||!motionKey().equals(acceptedMotion)?Reason.PATH_CHANGE:
             now-lastAcceptedAt>=REVIEW_MS&&latest.unclearMessage()==null?Reason.VISUAL_REVIEW:null;
-        return reason==null?null:new Decision(epoch,sequence,now,episode,latest,latestBoxes,reason,context(key),key);
+        return reason==null?null:new Decision(epoch,sequence,now,episode,latest,latestBoxes,reason,context(key),key,key+motionKey());
     }
     /** Silent AI inspection snapshot; this does not consume or manufacture a path change. */
     synchronized Decision review(long frame){
         if(latest==null||frame!=sequence)return null;
         String key=stateKey();
-        return new Decision(epoch,sequence,now,episode,latest,latestBoxes,Reason.VISUAL_REVIEW,context(key),key);
+        return new Decision(epoch,sequence,now,episode,latest,latestBoxes,Reason.VISUAL_REVIEW,context(key),key,key+motionKey());
     }
     synchronized void accepted(Decision decision){
         if(decision.epoch!=epoch||decision.sequence<lastAcceptedSequence)return;
-        acceptedKey=decision.stateKey;lastAcceptedSequence=decision.sequence;lastAcceptedAt=now;
+        acceptedKey=decision.stateKey;int marker=decision.memoryKey.indexOf(";motion=");acceptedMotion=marker<0?motionKey():decision.memoryKey.substring(marker);lastAcceptedSequence=decision.sequence;lastAcceptedAt=now;
     }
     synchronized boolean relevant(Decision decision){
         if(latest==null||decision.epoch!=epoch||decision.episode!=episode||now<decision.observedAt)return false;
-        if(!Objects.equals(decision.signature.unclearMessage(),latest.unclearMessage())&&(decision.signature.unclearMessage()!=null||latest.unclearMessage()!=null))return false;
+        if(decision.signature.unclearMessage()!=null)return false;
+        if(latest.unclearMessage()!=null&&(lastClearAt<0||now-lastClearAt>MotionFrameWindow.BLUR_GRACE_MS))return false;
         // Raw image colour changes are expected during a cane sweep and do not invalidate a scene.
-        return stateKey().equals(decision.stateKey);
+        String current=stateKey();
+        if(NO_CUES.equals(decision.stateKey))return true;
+        Set<String> currentCues=new HashSet<>(Arrays.asList(current.split("\\|")));
+        return currentCues.containsAll(Arrays.asList(decision.stateKey.split("\\|")));
     }
+    private String motionKey(){return ";motion=person="+motionRevisions[0]+",vehicle="+motionRevisions[1]+",cycle="+motionRevisions[2];}
+    private static int dynamicIndex(String category){return "person".equals(category)?0:"vehicle".equals(category)?1:"two_wheeler".equals(category)?2:-1;}
+    private static boolean dynamic(String category){return dynamicIndex(category)>=0;}
     private String stateKey(){
         SortedSet<String> keys=new TreeSet<>();
         for(Track track:tracks)if(track.path(now))keys.add(track.category+":"+track.episodeBand+":path");
@@ -123,6 +162,7 @@ final class WalkingSceneGate {
     private String context(String key){
         StringBuilder text=new StringBuilder("camera_mount=white_cane_sweep; corridor=image_center_candidate_only; distance_metres=unavailable; image_upper_band_does_not_measure_head_height; no_detector_cue_does_not_mean_clear.\n");
         text.append("episode=").append(episode).append("; semantic_state=").append(key).append("\n");
+        text.append("image_growth_or_distinct_entrant_review_revisions").append(motionKey()).append("; review_hints_only_not_measured_motion_or_distance\n");
         List<Track> ordered=new ArrayList<>();for(Track track:tracks)if(track.confirmed)ordered.add(track);
         ordered.sort((a,b)->{int priorityA=(a.path(now)?0:2)+(a.lastSequence==sequence?0:1),priorityB=(b.path(now)?0:2)+(b.lastSequence==sequence?0:1);return priorityA!=priorityB?Integer.compare(priorityA,priorityB):Long.compare(a.id,b.id);});
         int count=0;for(Track track:ordered){

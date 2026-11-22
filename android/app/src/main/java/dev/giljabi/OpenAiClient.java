@@ -34,10 +34,10 @@ final class OpenAiClient {
             JSONArray content=new JSONArray();
             for(int i=0;i<images.length;i++){
                 if(walking)content.put(new JSONObject().put("type","text").put("text","Cane camera frame "+(i+1)+" of "+images.length+"; chronological order, last is newest."));
-                content.put(new JSONObject().put("type","image_url").put("image_url",new JSONObject().put("url","data:image/jpeg;base64,"+Base64.getEncoder().encodeToString(images[i])).put("detail","low")));
+                content.put(new JSONObject().put("type","image_url").put("image_url",new JSONObject().put("url","data:image/jpeg;base64,"+Base64.getEncoder().encodeToString(images[i])).put("detail",walking&&i==images.length-1?"auto":"low")));
             }
             content.put(new JSONObject().put("type","text").put("text",question));
-            String system="Describe only directly visible evidence in the requested language. Automatic walking guidance uses natural Korean. A cane-mounted camera sweeps; image position is not a measured travel path. Do not invent distances, physical height, safety, or cane capabilities. Treat YOLO observations as fallible context. For automatic walking guidance obey the requested JSON and speak=false when nothing useful changed.";
+            String system=walking?WalkingGuidance.VISION_SYSTEM:"Describe only directly visible evidence in the requested language. Do not invent distances, physical height, safety, or cane capabilities.";
             JSONObject body=options(model,walking?256:768).put("messages",new JSONArray().put(new JSONObject().put("role","system").put("content",system)).put(new JSONObject().put("role","user").put("content",content)));
             if(walking){
                 JSONObject schema=new JSONObject().put("type","object").put("additionalProperties",false)
@@ -95,7 +95,7 @@ final class OpenAiClient {
     static final class Request implements CloudRequest {
         private final HttpURLConnection connection;private final byte[] body;private final boolean transcribe,raw;
         private final BooleanSupplier cancelled;private final long deadlineMs;
-        private final AtomicBoolean closed=new AtomicBoolean();private volatile boolean timedOut;private volatile InputStream input;private volatile ScheduledFuture<?> deadline;
+        private final AtomicBoolean closed=new AtomicBoolean();private volatile boolean timedOut;private volatile ScheduledFuture<?> deadline;
         Request(String path,String key,byte[] body,String contentType,boolean transcribe,boolean raw,GeminiClient.Connector connector,BooleanSupplier cancelled,long deadlineMs)throws IOException{
             if(!GeminiClient.validKey(key))throw new IOException("OpenAI 설정에서 개인 API 키를 입력하세요.");
             this.body=body;this.transcribe=transcribe;this.raw=raw;this.cancelled=cancelled;this.deadlineMs=deadlineMs;check();
@@ -108,13 +108,13 @@ final class OpenAiClient {
                 check();if(body!=null)try(OutputStream out=connection.getOutputStream()){for(int at=0;at<body.length;at+=16384){check();out.write(body,at,Math.min(16384,body.length-at));}}
                 check();int code=connection.getResponseCode();check();
                 if(code!=200){byte[] error=new byte[0];try(InputStream stream=connection.getErrorStream()){if(stream!=null)error=GeminiClient.readError(stream);}catch(IOException ignored){}throw new ApiException(code,error);}
-                input=connection.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream();
-                try(InputStream stream=input){byte[] chunk=new byte[8192];int n;while((n=stream.read(chunk))!=-1){check();if(out.size()+n>GeminiClient.MAX_RESPONSE)throw new IOException("OpenAI 응답이 너무 큽니다.");out.write(chunk,0,n);}}
+                ByteArrayOutputStream out=new ByteArrayOutputStream();
+                try(InputStream stream=connection.getInputStream()){check();byte[] chunk=new byte[8192];int n;while((n=stream.read(chunk))!=-1){check();if(out.size()+n>GeminiClient.MAX_RESPONSE)throw new IOException("OpenAI 응답이 너무 큽니다.");out.write(chunk,0,n);}}
                 check();byte[] bytes=out.toByteArray();return raw?new String(bytes,StandardCharsets.UTF_8):response(bytes,transcribe);
             }catch(IOException e){if(timedOut)throw new IOException("OpenAI 응답 시간을 넘겨 요청을 중단했어요. 잠시 후 다시 시도해주세요.",e);throw e;}
             finally{close();}
         }
         private void check()throws IOException{if(closed.get()||cancelled.getAsBoolean())throw new IOException("OpenAI 요청을 중지했어요.");}
-        @Override public void close(){if(deadline!=null)deadline.cancel(false);if(closed.compareAndSet(false,true))connection.disconnect();InputStream stream=input;if(stream!=null)try{stream.close();}catch(IOException ignored){}}
+        @Override public void close(){if(deadline!=null)deadline.cancel(false);if(closed.compareAndSet(false,true))try{connection.disconnect();}catch(RuntimeException failure){CrashDiagnostics.record("OpenAI HTTP 요청 중지",failure);}}
     }
 }
